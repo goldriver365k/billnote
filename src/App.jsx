@@ -1333,6 +1333,24 @@ export default function App() {
   };
 
   const [photoView, setPhotoView] = useState(null); // {loading, dataUrl}
+  // photos are kept for 6 months (by receipt date); ledger data itself is kept
+  const PHOTO_KEEP_MONTHS = 6;
+  const photoCleanupDone = useRef(false);
+  useEffect(() => {
+    if (!isAdmin || !companyId || !receiptsLoaded || photoCleanupDone.current) return;
+    photoCleanupDone.current = true;
+    const d = new Date();
+    d.setMonth(d.getMonth() - PHOTO_KEEP_MONTHS);
+    const cutoff = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const expired = receipts.filter((r) => r.hasPhoto && (r.date || "9999") < cutoff);
+    expired.forEach(async (r) => {
+      try {
+        await deleteDoc(doc(db, "companies", companyId, "photos", r.id));
+        await setDoc(doc(db, "companies", companyId, "receipts", r.id), { hasPhoto: false }, { merge: true });
+      } catch (e) { console.error("만료 사진 삭제 실패", e); }
+    });
+  }, [isAdmin, companyId, receiptsLoaded, receipts]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const viewPhoto = async (id) => {
     setPhotoView({ loading: true });
     try {
@@ -1734,7 +1752,7 @@ export default function App() {
         {tab === "manage" && isAdmin && <StoreAdminPanel config={config} onUpdateConfig={persistConfig} onUpdateCompanyCode={updateCompanyCode} onMigrateOldData={migrateOldData} />}
 
         {tab === "tax" && isAdmin && (
-          <TaxExportView companyId={companyId} storeOptions={config.stores.map((s) => s.name)} receipts={receipts} sales={sales} payments={payments} companyName={config.companyName || ""} defaultMonth={selectedMonth} />
+          <TaxExportView keepMonths={PHOTO_KEEP_MONTHS} companyId={companyId} storeOptions={config.stores.map((s) => s.name)} receipts={receipts} sales={sales} payments={payments} companyName={config.companyName || ""} defaultMonth={selectedMonth} />
         )}
 
         {tab === "debt" && (

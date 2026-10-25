@@ -23,7 +23,7 @@ function monthsBetween(from, to) {
   return out;
 }
 
-export default function TaxExportView({ companyId, storeOptions, receipts, sales, payments, companyName, defaultMonth }) {
+export default function TaxExportView({ keepMonths = 6, companyId, storeOptions, receipts, sales, payments, companyName, defaultMonth }) {
   const [from, setFrom] = useState(defaultMonth);
   const [to, setTo] = useState(defaultMonth);
   const [store, setStore] = useState("전체");
@@ -41,6 +41,13 @@ export default function TaxExportView({ companyId, storeOptions, receipts, sales
     const p = payments.filter((x) => inRange(x.date) && storeOk(x.store)).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
     return { r, s, p };
   }, [receipts, sales, payments, from, to, store]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // photos that will be auto-deleted within the next 30 days
+  const soon = useMemo(() => {
+    const lim = new Date(); lim.setMonth(lim.getMonth() - keepMonths); lim.setDate(lim.getDate() + 30);
+    const k = `${lim.getFullYear()}-${String(lim.getMonth() + 1).padStart(2, "0")}-${String(lim.getDate()).padStart(2, "0")}`;
+    return receipts.filter((x) => x.hasPhoto && x.date && x.date < k).length;
+  }, [receipts, keepMonths]);
 
   const totalPurchase = data.r.reduce((a, x) => a + num(x.total), 0);
   const totalSales = data.s.reduce((a, x) => a + num(x.amount), 0);
@@ -164,6 +171,10 @@ export default function TaxExportView({ companyId, storeOptions, receipts, sales
         <button className="fab-btn" style={{ position: "static" }} onClick={makeZip} disabled={busy || (!data.r.length && !data.s.length)}>
           {busy ? <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> : <FileArchive size={16} />} ZIP 파일 내려받기
         </button>
+        <div style={{ fontSize: 12, marginBottom: 10, padding: "8px 10px", background: "rgba(0,0,0,0.05)", borderRadius: 8 }}>
+          영수증 사진은 영수증 날짜 기준 {keepMonths}개월간 보관되며 이후 자동 삭제됩니다(장부 숫자 자료는 유지).
+          {soon > 0 && <b style={{ color: "var(--stamp)" }}> 30일 안에 삭제될 사진 {soon}장 - 미리 ZIP으로 받아 두세요.</b>}
+        </div>
         {photoProgress && <div style={{ fontSize: 13, marginTop: 8 }}>{photoProgress}</div>}
         {err && <div style={{ color: "var(--stamp)", marginTop: 8, fontSize: 13 }}>{err}</div>}
         <p style={{ fontSize: 12, opacity: 0.7, marginTop: 12 }}>
