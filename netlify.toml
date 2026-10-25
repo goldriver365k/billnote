@@ -11,3 +11,14 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# 운영자 페이지는 검색결과에 노출되지 않도록 설정
+[[headers]]
+  for = "/admin"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/admin/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"

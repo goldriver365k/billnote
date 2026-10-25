@@ -3,7 +3,39 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>영수증 장부</title>
+    <title>BillNote 빌노트 | AI 영수증 자동정리·지출관리</title>
+    <meta name="description" content="영수증 사진을 등록하면 AI가 날짜, 매장명, 품목, 금액을 읽어 정리합니다. 일별·월별 지출과 매장별 영수증을 간편하게 관리하는 BillNote." />
+    <link rel="canonical" href="https://billnote.store/" />
+    <meta name="robots" content="index,follow" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="BillNote" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta property="og:title" content="BillNote 빌노트 | AI 영수증 자동정리" />
+    <meta property="og:description" content="영수증 사진으로 매장 지출을 간편하게 정리하세요." />
+    <meta property="og:url" content="https://billnote.store/" />
+    <meta property="og:image" content="https://billnote.store/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
+    <!-- 네이버 서치어드바이저 소유확인: 발급받은 인증값을 content에 넣고 주석을 풀어 주세요 -->
+    <!-- <meta name="naver-site-verification" content="발급받은_실제_인증값" /> -->
+    <!-- 구글 서치콘솔 소유확인: 발급받은 인증값을 content에 넣고 주석을 풀어 주세요 -->
+    <!-- <meta name="google-site-verification" content="발급받은_실제_인증값" /> -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        { "@type": "WebSite", "name": "BillNote 빌노트", "url": "https://billnote.store/", "inLanguage": "ko" },
+        {
+          "@type": "SoftwareApplication",
+          "name": "BillNote 빌노트",
+          "url": "https://billnote.store/",
+          "applicationCategory": "BusinessApplication",
+          "operatingSystem": "Web",
+          "inLanguage": "ko",
+          "description": "영수증 사진을 AI가 읽어 날짜, 구매처, 품목, 금액을 정리하고 일별·월별·매장별 지출을 관리하는 웹서비스"
+        }
+      ]
+    }
+    </script>
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
@@ -12,7 +44,22 @@
     <meta name="theme-color" content="#0B57E8" />
   </head>
   <body style="margin:0;">
-    <div id="root"></div>
+    <div id="root">
+      <!-- 검색엔진·JS 미지원 환경용 소개 (앱이 실행되면 자동으로 교체됩니다) -->
+      <main style="max-width:640px;margin:0 auto;padding:32px 20px;font-family:sans-serif;line-height:1.7;color:#222">
+        <h1>BillNote — AI 영수증 자동정리 및 지출관리</h1>
+        <p>BillNote는 영수증 사진을 분석하여 매장명, 날짜, 품목, 금액을 기록하고 지출 내역을 체계적으로 관리할 수 있도록 돕는 웹서비스입니다.</p>
+        <ul>
+          <li>AI 영수증 사진 분석</li>
+          <li>구매처·날짜·품목·금액 자동 정리</li>
+          <li>일별·월별 지출관리</li>
+          <li>매장별 영수증 관리</li>
+          <li>구매처별·후불·매출/원가율 확인</li>
+          <li>세무자료 ZIP 내려받기</li>
+          <li>PC 및 모바일 지원</li>
+        </ul>
+      </main>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
