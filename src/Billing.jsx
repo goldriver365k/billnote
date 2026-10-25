@@ -74,7 +74,9 @@ export function BillingBanner({ summary, onOpen }) {
 export function BillingModal({ list, billing, company, onClose }) {
   const [copied, setCopied] = useState(false);
   const bankInfo = billing?.bankInfo || DEFAULT_BANK_INFO;
-  const tierLine = (k) => `${PLANS[k].label}: 월 ${won(PLANS[k].month)} / 연 ${won(PLANS[k].year)}`;
+  const vat = (n) => Math.round(n * 1.1);
+  const tierLine = (k) => `${PLANS[k].label}: 월 ${won(PLANS[k].month)} / 연 ${won(PLANS[k].year)} (부가세 별도)`;
+  const tierPay = (k) => `${PLANS[k].label}: 월 ${won(vat(PLANS[k].month))} / 연 ${won(vat(PLANS[k].year))}`;
   const stLabel = (st) =>
     st.state === "exempt" ? "무료(운영자)" :
     st.state === "paid" ? `이용 중 ~${fmt(st.until)} (${st.daysLeft}일 남음)${st.overLimit ? " · 이번 달 300장 도달" : ""}` :
@@ -97,6 +99,11 @@ export function BillingModal({ list, billing, company, onClose }) {
           <div style={{ margin: "8px 0" }}>
             · {tierLine("basic")}<br />
             · {tierLine("plus")}
+          </div>
+          <div style={{ fontSize: 13, background: "rgba(0,0,0,0.05)", borderRadius: 8, padding: "8px 10px" }}>
+            <b>입금하실 금액 (부가세 10% 포함)</b><br />
+            · {tierPay("basic")}<br />
+            · {tierPay("plus")}
           </div>
           <div style={{ fontSize: 13 }}>
             · 결제 후 1개월(또는 1년)이 지나면 해당 매장은 자동으로 등록·판독이 막힙니다(조회·ZIP 다운로드는 가능).<br />
@@ -220,8 +227,8 @@ export function PlatformAdminPanel({ billing }) {
                     <b>{s.name}</b> · {label} · {s.tier === "plus" ? "300장 이상" : "기본"}
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4, alignItems: "center" }}>
                       <select value={tiers[key] || s.tier || "basic"} onChange={(e) => setTiers({ ...tiers, [key]: e.target.value })}>
-                        <option value="basic">기본 (5,000/월)</option>
-                        <option value="plus">300장 이상 (10,000/월)</option>
+                        <option value="basic">기본 (5,000/월, 부가세 별도)</option>
+                        <option value="plus">300장 이상 (10,000/월, 부가세 별도)</option>
                       </select>
                       <button className="btn-secondary" onClick={() => extend(c, s, "month")}>+1개월</button>
                       <button className="btn-secondary" onClick={() => extend(c, s, "year")}>+1년</button>
