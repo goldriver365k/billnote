@@ -38,7 +38,7 @@ import {
 import { db, auth, googleProvider } from "./firebase";
 import TaxExportView from "./TaxExport";
 import CameraCapture from "./CameraCapture";
-import { computeStatus, BillingBanner, BillingModal, PlatformAdminPanel, PLATFORM_ADMIN_EMAIL } from "./Billing";
+import { computeStatus, summarize, BillingBanner, BillingModal, PlatformAdminPanel, PLATFORM_ADMIN_EMAIL } from "./Billing";
 import {
   collection,
   doc,
@@ -1316,7 +1316,7 @@ export default function App() {
   };
 
   const saveReceipt = async (r) => {
-    if (!r.id && blockIfExpired()) { showNext(); return; }
+    if (!r.id && blockIfExpired(r.store)) { showNext(); return; }
     try {
       const { id, _photo, ...rest } = r;
       if (id) {
@@ -1360,14 +1360,22 @@ export default function App() {
     return onSnapshot(doc(db, "config", "billing"), (snap) => setBillingInfo(snap.exists() ? snap.data() : null), () => {});
   }, [companyId]);
   const isPlatformOwner = !!authUser && !authUser.isAnonymous && authUser.email === PLATFORM_ADMIN_EMAIL;
-  const monthCount = (() => {
-    const d = new Date();
-    const start = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
-    return receipts.filter((r) => (r.createdAt || 0) >= start).length;
-  })();
-  const billing = computeStatus(companyDoc, isPlatformOwner, monthCount);
-  const blockIfExpired = () => {
-    if (billing.canAdd) return false;
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+  const countFor = (storeName) => receipts.filter((r) => r.store === storeName && (r.createdAt || 0) >= monthStart).length;
+  const storeStatusFor = (storeName) => {
+    const entry = (config.stores || []).find((s) => s.name === storeName) || { name: storeName };
+    return computeStatus(entry, companyDoc, isPlatformOwner, countFor(storeName));
+  };
+  // stores this session can see (employees: their own store only)
+  const billingStores = (config.stores || []).filter((s) => (isAdmin ? true : s.name === session?.storeName));
+  const billingList = billingStores.map((s) => ({ name: s.name, st: storeStatusFor(s.name) }));
+  const billingSummary = summarize(billingList);
+  // storeName given -> that store must be allowed; otherwise at least one store must be allowed
+  const blockIfExpired = (storeName) => {
+    const ok = storeName
+      ? storeStatusFor(storeName).canAdd
+      : (billingList.length === 0 ? computeStatus({}, companyDoc, isPlatformOwner, 0).canAdd : billingList.some((x) => x.st.canAdd));
+    if (ok) return false;
     setBillingOpen(true);
     return true;
   };
@@ -1449,7 +1457,7 @@ export default function App() {
   };
 
   const saveSale = async ({ store, date, amount }) => {
-    if (blockIfExpired()) return;
+    if (blockIfExpired(store)) return;
     try {
       const id = `${store}__${date}`;
       await setDoc(doc(db, "companies", companyId, "sales", id), { store, date, amount, updatedAt: Date.now() });
@@ -1469,7 +1477,7 @@ export default function App() {
   };
 
   const saveVendorPayment = async ({ store, vendor, date, amount, method, memo }) => {
-    if (blockIfExpired()) return;
+    if (blockIfExpired(store)) return;
     try {
       await addDoc(collection(db, "companies", companyId, "vendorPayments"), { store, vendor, date, amount, method, memo, createdAt: Date.now() });
     } catch (e) {
@@ -1796,7 +1804,7 @@ export default function App() {
         <MonthPicker value={selectedMonth} availableMonths={availableMonths} onChange={setSelectedMonth} />
       </div>
 
-      <BillingBanner status={billing} onOpen={() => setBillingOpen(true)} />
+      <BillingBanner summary={billingSummary} onOpen={() => setBillingOpen(true)} />
 
       <div className="tabs">
         <button className={`tab-btn ${tab === "daily" ? "active" : ""}`} onClick={() => setTab("daily")}><Calendar size={14} /> 일별</button>
@@ -1985,7 +1993,7 @@ export default function App() {
       {notice && !analyzing && <div className="analyzing-banner">{notice}</div>}
       {error && !analyzing && <div className="error-banner">{error}</div>}
 
-      {billingOpen && <BillingModal status={billing} billing={billingInfo} company={companyDoc} onClose={() => setBillingOpen(false)} />}
+      {billingOpen && <BillingModal list={billingList} billing={billingInfo} company={companyDoc} onClose={() => setBillingOpen(false)} />}
 
       {cameraOpen && (
         <CameraCapture

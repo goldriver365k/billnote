@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { doc, getDocs, setDoc, collection } from "firebase/firestore";
+import { doc, getDoc, getDocs, setDoc, collection } from "firebase/firestore";
 import { X, Loader2 } from "lucide-react";
 import { db } from "./firebase";
 
@@ -7,66 +7,93 @@ export const PLATFORM_ADMIN_EMAIL = "higidia@gmail.com";
 export const TRIAL_DAYS = 7;
 export const MONTHLY_LIMIT = 300;
 export const PLANS = {
-  basic: { label: "기본 (월 300장 이하)", month: 5000, year: 50000 },
-  plus: { label: "300장 초과 (무제한)", month: 10000, year: 100000 },
+  basic: { label: "기본 (월 300장 미만)", month: 5000, year: 50000 },
+  plus: { label: "300장 이상 (무제한)", month: 10000, year: 100000 },
 };
 const DAY = 86400000;
 const fmt = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const won = (n) => n.toLocaleString("ko-KR") + "원";
 
-// state: exempt | paid | trial | expired
-export function computeStatus(company, isPlatformOwner, monthCount) {
+// Per-store status. store = {name, paidUntil, tier}; company supplies the 7-day trial.
+// state: exempt | paid | trial | expired. The 300/month limit applies to basic tier (trial included).
+export function computeStatus(store, company, isPlatformOwner, monthCount) {
   const now = Date.now();
   if (isPlatformOwner) return { state: "exempt", canAdd: true };
-  if (!company) return { state: "trial", canAdd: true, daysLeft: TRIAL_DAYS };
-  const tier = company.tier === "plus" ? "plus" : "basic";
-  if ((company.paidUntil || 0) > now) {
-    const overLimit = tier === "basic" && monthCount >= MONTHLY_LIMIT;
-    return { state: "paid", tier, until: company.paidUntil, daysLeft: Math.ceil((company.paidUntil - now) / DAY), overLimit, canAdd: !overLimit };
+  const tier = store?.tier === "plus" ? "plus" : "basic";
+  const overLimit = tier === "basic" && monthCount >= MONTHLY_LIMIT;
+  if ((store?.paidUntil || 0) > now) {
+    return { state: "paid", tier, until: store.paidUntil, daysLeft: Math.ceil((store.paidUntil - now) / DAY), overLimit, canAdd: !overLimit };
   }
-  const trialEnd = (company.trialStartedAt || now) + TRIAL_DAYS * DAY;
-  if (trialEnd > now) return { state: "trial", until: trialEnd, daysLeft: Math.ceil((trialEnd - now) / DAY), canAdd: true };
-  return { state: "expired", until: Math.max(trialEnd, company.paidUntil || 0), canAdd: false };
+  const trialEnd = ((company && company.trialStartedAt) || now) + TRIAL_DAYS * DAY;
+  if (trialEnd > now) return { state: "trial", tier, until: trialEnd, daysLeft: Math.ceil((trialEnd - now) / DAY), overLimit, canAdd: !overLimit };
+  return { state: "expired", tier, until: Math.max(trialEnd, store?.paidUntil || 0), canAdd: false };
 }
 
-export function BillingBanner({ status, onOpen }) {
-  if (status.state === "exempt") return null;
-  let text, bg = "#2f4f3f", color = "#fff";
-  if (status.state === "trial") text = `무료 체험 중 · ${status.daysLeft}일 남음`;
-  else if (status.state === "paid") {
-    if (status.overLimit) { text = `이번 달 영수증 ${MONTHLY_LIMIT}장을 넘었습니다 - 등록이 제한됩니다. 300장 초과 요금제가 필요합니다`; bg = "#b03a2e"; }
-    else if (status.daysLeft <= 7) { text = `이용 기간 ${fmt(status.until)}까지 (${status.daysLeft}일 남음)`; bg = "#b9770e"; }
-    else return null;
-  } else { text = "무료 체험이 끝났습니다 - 조회만 가능하고 등록·판독은 제한됩니다"; bg = "#b03a2e"; }
+// Summarise several stores into one banner status.
+export function summarize(list) {
+  // list: [{name, st}]
+  const expired = list.filter((x) => x.st.state === "expired");
+  const over = list.filter((x) => x.st.overLimit && x.st.state !== "expired");
+  if (list.length && list.every((x) => x.st.state === "exempt")) return { kind: "exempt" };
+  if (expired.length) return { kind: "expired", names: expired.map((x) => x.name) };
+  if (over.length) return { kind: "over", names: over.map((x) => x.name) };
+  const trial = list.filter((x) => x.st.state === "trial");
+  if (trial.length) return { kind: "trial", daysLeft: Math.min(...trial.map((x) => x.st.daysLeft)) };
+  const soon = list.filter((x) => x.st.state === "paid").sort((a, b) => a.st.until - b.st.until)[0];
+  if (soon && soon.st.daysLeft <= 7) return { kind: "soon", name: soon.name, until: soon.st.until, daysLeft: soon.st.daysLeft };
+  return { kind: "ok" };
+}
+
+export function BillingBanner({ summary, onOpen }) {
+  let text, bg = "#2f4f3f";
+  if (!summary || summary.kind === "exempt" || summary.kind === "ok") return null;
+  if (summary.kind === "trial") text = `무료 체험 중 · ${summary.daysLeft}일 남음`;
+  else if (summary.kind === "soon") { text = `${summary.name} 이용 기간 ${fmt(summary.until)}까지 (${summary.daysLeft}일 남음)`; bg = "#b9770e"; }
+  else if (summary.kind === "over") { text = `${summary.names.join(", ")}: 이번 달 영수증 ${MONTHLY_LIMIT}장 도달 - 등록이 막혔습니다 (300장 이상 요금제 필요)`; bg = "#b03a2e"; }
+  else { text = `${summary.names.join(", ")}: 이용 기간이 끝나 등록·판독이 막혔습니다 (조회만 가능)`; bg = "#b03a2e"; }
   return (
-    <div onClick={onOpen} style={{ background: bg, color, fontSize: 13, padding: "8px 12px", textAlign: "center", cursor: "pointer" }}>
+    <div onClick={onOpen} style={{ background: bg, color: "#fff", fontSize: 13, padding: "8px 12px", textAlign: "center", cursor: "pointer" }}>
       {text} <u style={{ marginLeft: 6 }}>요금 안내</u>
     </div>
   );
 }
 
-export function BillingModal({ status, billing, company, onClose }) {
+export function BillingModal({ list, billing, company, onClose }) {
   const tierLine = (k) => `${PLANS[k].label}: 월 ${won(PLANS[k].month)} / 연 ${won(PLANS[k].year)}`;
+  const stLabel = (st) =>
+    st.state === "exempt" ? "무료(운영자)" :
+    st.state === "paid" ? `이용 중 ~${fmt(st.until)} (${st.daysLeft}일 남음)${st.overLimit ? " · 이번 달 300장 도달" : ""}` :
+    st.state === "trial" ? `무료 체험 ~${fmt(st.until)} (${st.daysLeft}일 남음)${st.overLimit ? " · 300장 도달" : ""}` :
+    "이용 기간 종료";
   return (
     <div className="modal-backdrop" onClick={onClose} style={{ zIndex: 1500, alignItems: "center" }}>
       <div className="modal" onClick={(e) => e.stopPropagation()} style={{ borderRadius: 16, maxWidth: 420 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <h3 style={{ margin: 0 }}>이용 요금 안내</h3>
+          <h3 style={{ margin: 0 }}>이용 요금 안내 (매장별)</h3>
           <button className="icon-btn" onClick={onClose} aria-label="닫기"><X size={16} /></button>
         </div>
         <div style={{ fontSize: 14, lineHeight: 1.8 }}>
-          <b>가입 후 {TRIAL_DAYS}일 무료 체험</b>
+          <b>가입 후 {TRIAL_DAYS}일 무료 체험 · 요금은 매장 1곳 기준</b>
           <div style={{ margin: "8px 0" }}>
             · {tierLine("basic")}<br />
             · {tierLine("plus")}
           </div>
-          {status.state === "trial" && <div>무료 체험 {status.daysLeft}일 남음 (~{fmt(status.until)})</div>}
-          {status.state === "paid" && <div>이용 기간 ~{fmt(status.until)} · {PLANS[status.tier].label}</div>}
-          {status.state === "expired" && <div style={{ color: "var(--stamp)" }}>체험/이용 기간이 끝났습니다. 조회와 ZIP 다운로드는 가능하고, 영수증 등록·판독·매출 입력은 제한됩니다.</div>}
+          <div style={{ fontSize: 13 }}>
+            · 결제 후 1개월(또는 1년)이 지나면 해당 매장은 자동으로 등록·판독이 막힙니다(조회·ZIP 다운로드는 가능).<br />
+            · 한 매장의 한 달 영수증이 300장에 도달하면 기본 요금제는 등록이 막히고, 300장 이상 요금제로 바꾸면 계속 등록됩니다.
+          </div>
+          <div style={{ margin: "10px 0" }}>
+            {list.map((x) => (
+              <div key={x.name} style={{ padding: "4px 0", borderTop: "1px dashed rgba(0,0,0,0.2)" }}>
+                <b>{x.name}</b> · {x.st.state === "exempt" ? "" : (x.st.tier === "plus" ? "300장 이상" : "기본")} {stLabel(x.st)}
+              </div>
+            ))}
+            {list.length === 0 && <div>등록된 매장이 없습니다</div>}
+          </div>
           <div style={{ marginTop: 12, padding: 10, background: "rgba(0,0,0,0.05)", borderRadius: 8, whiteSpace: "pre-wrap" }}>
             <b>입금 안내</b>{"\n"}
             {billing?.bankInfo || "입금 계좌는 운영자에게 문의해 주세요."}
-            {"\n"}입금자명에 회사명을 적어 주세요{company?.companyName ? ` (${company.companyName})` : ""}.
+            {"\n"}입금자명에 회사명을 적고, 연장할 매장명을 알려 주세요{company?.companyName ? ` (${company.companyName})` : ""}.
             {"\n"}입금 확인 후 이용 기간이 연장됩니다.
             {billing?.contact ? `\n문의: ${billing.contact}` : ""}
           </div>
@@ -92,7 +119,15 @@ export function PlatformAdminPanel({ billing }) {
 
   const load = async () => {
     const snap = await getDocs(collection(db, "companies"));
-    setCompanies(snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
+    const list = await Promise.all(snap.docs.map(async (d) => {
+      let stores = [];
+      try {
+        const cs = await getDoc(doc(db, "companies", d.id, "config", "store"));
+        stores = cs.exists() ? (cs.data().stores || []) : [];
+      } catch (e) { /* ignore */ }
+      return { id: d.id, ...d.data(), stores };
+    }));
+    setCompanies(list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
   };
   useEffect(() => { load().catch((e) => setMsg("불러오기 실패: " + e.message)); }, []);
   useEffect(() => { setBank(billing?.bankInfo || ""); setContact(billing?.contact || ""); }, [billing]);
@@ -101,21 +136,24 @@ export function PlatformAdminPanel({ billing }) {
     await setDoc(doc(db, "config", "billing"), { bankInfo: bank, contact }, { merge: true });
     setMsg("입금 안내를 저장했습니다");
   };
-  const extend = async (c, unit) => {
-    const tier = tiers[c.id] || c.tier || "basic";
-    const base = Math.max(Date.now(), c.paidUntil || 0);
-    await setDoc(doc(db, "companies", c.id), { paidUntil: addPeriod(base, unit), tier }, { merge: true });
-    setMsg(`${c.companyName || c.email}: ${unit === "year" ? "1년" : "1개월"} 연장했습니다`);
-    load();
+  const updateStore = async (c, storeName, patchFn) => {
+    const stores = c.stores.map((s) => (s.name === storeName ? { ...s, ...patchFn(s) } : s));
+    await setDoc(doc(db, "companies", c.id, "config", "store"), { stores }, { merge: true });
+    await load();
+  };
+  const extend = async (c, s, unit) => {
+    const key = c.id + "__" + s.name;
+    const tier = tiers[key] || s.tier || "basic";
+    await updateStore(c, s.name, (cur) => ({ paidUntil: addPeriod(Math.max(Date.now(), cur.paidUntil || 0), unit), tier }));
+    setMsg(`${c.companyName || c.email} / ${s.name}: ${unit === "year" ? "1년" : "1개월"} 연장했습니다`);
+  };
+  const clearPaid = async (c, s) => {
+    if (!window.confirm(`${s.name}의 유료 기간을 해제할까요?`)) return;
+    await updateStore(c, s.name, () => ({ paidUntil: 0 }));
   };
   const extendTrial = async (c) => {
     await setDoc(doc(db, "companies", c.id), { trialStartedAt: (c.trialStartedAt || Date.now()) + 7 * DAY }, { merge: true });
-    load();
-  };
-  const clearPaid = async (c) => {
-    if (!window.confirm(`${c.companyName || c.email}의 유료 기간을 해제할까요?`)) return;
-    await setDoc(doc(db, "companies", c.id), { paidUntil: 0 }, { merge: true });
-    load();
+    await load();
   };
 
   return (
@@ -129,26 +167,39 @@ export function PlatformAdminPanel({ billing }) {
       </div>
 
       <div className="tape-card" style={{ padding: 16, marginTop: 12 }}>
-        <h3 style={{ margin: "0 0 10px" }}>회원사 관리</h3>
+        <h3 style={{ margin: "0 0 10px" }}>회원사·매장별 이용 관리</h3>
         {!companies && <div><Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> 불러오는 중...</div>}
         {companies && companies.length === 0 && <div>가입한 회사가 없습니다</div>}
         {companies && companies.map((c) => {
-          const st = computeStatus(c, c.email === PLATFORM_ADMIN_EMAIL, 0);
-          const label = st.state === "exempt" ? "운영자(무료)" : st.state === "paid" ? `유료 ~${fmt(st.until)}` : st.state === "trial" ? `체험 ~${fmt(st.until)}` : "만료";
+          const owner = c.email === PLATFORM_ADMIN_EMAIL;
           return (
             <div key={c.id} style={{ borderTop: "1px dashed rgba(0,0,0,0.2)", padding: "10px 0", fontSize: 13 }}>
               <div style={{ fontWeight: 600 }}>{c.companyName || "(이름 없음)"} <span style={{ fontWeight: 400, opacity: 0.7 }}>{c.email}</span></div>
-              <div style={{ opacity: 0.8 }}>가입 {c.createdAt ? fmt(c.createdAt) : "-"} · {label} · {c.tier === "plus" ? "300장 초과" : "기본"}</div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6, alignItems: "center" }}>
-                <select value={tiers[c.id] || c.tier || "basic"} onChange={(e) => setTiers({ ...tiers, [c.id]: e.target.value })}>
-                  <option value="basic">기본 (5,000/월)</option>
-                  <option value="plus">300장 초과 (10,000/월)</option>
-                </select>
-                <button className="btn-secondary" onClick={() => extend(c, "month")}>+1개월</button>
-                <button className="btn-secondary" onClick={() => extend(c, "year")}>+1년</button>
-                <button className="btn-secondary" onClick={() => extendTrial(c)}>체험 +7일</button>
-                <button className="btn-secondary" onClick={() => clearPaid(c)}>유료 해제</button>
+              <div style={{ opacity: 0.8 }}>
+                가입 {c.createdAt ? fmt(c.createdAt) : "-"} · 체험 ~{fmt((c.trialStartedAt || c.createdAt || Date.now()) + TRIAL_DAYS * DAY)}
+                {owner ? " · 운영자(무료)" : ""}
+                <button className="btn-secondary" style={{ marginLeft: 8 }} onClick={() => extendTrial(c)}>체험 +7일</button>
               </div>
+              {c.stores.length === 0 && <div style={{ opacity: 0.7, marginTop: 4 }}>등록된 매장 없음</div>}
+              {c.stores.map((s) => {
+                const key = c.id + "__" + s.name;
+                const st = computeStatus(s, c, owner, 0);
+                const label = st.state === "exempt" ? "무료" : st.state === "paid" ? `유료 ~${fmt(st.until)}` : st.state === "trial" ? "체험 중" : "만료";
+                return (
+                  <div key={key} style={{ marginTop: 8, paddingLeft: 8, borderLeft: "3px solid rgba(0,0,0,0.15)" }}>
+                    <b>{s.name}</b> · {label} · {s.tier === "plus" ? "300장 이상" : "기본"}
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4, alignItems: "center" }}>
+                      <select value={tiers[key] || s.tier || "basic"} onChange={(e) => setTiers({ ...tiers, [key]: e.target.value })}>
+                        <option value="basic">기본 (5,000/월)</option>
+                        <option value="plus">300장 이상 (10,000/월)</option>
+                      </select>
+                      <button className="btn-secondary" onClick={() => extend(c, s, "month")}>+1개월</button>
+                      <button className="btn-secondary" onClick={() => extend(c, s, "year")}>+1년</button>
+                      <button className="btn-secondary" onClick={() => clearPaid(c, s)}>유료 해제</button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           );
         })}
