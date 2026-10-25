@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { FileArchive, Loader2 } from "lucide-react";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "./firebase";
 
 const num = (n) => Number(n) || 0;
 const mk = (d) => (d || "").slice(0, 7);
@@ -21,12 +23,14 @@ function monthsBetween(from, to) {
   return out;
 }
 
-export default function TaxExportView({ storeOptions, receipts, sales, payments, companyName, defaultMonth }) {
+export default function TaxExportView({ companyId, storeOptions, receipts, sales, payments, companyName, defaultMonth }) {
   const [from, setFrom] = useState(defaultMonth);
   const [to, setTo] = useState(defaultMonth);
   const [store, setStore] = useState("전체");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [withPhotos, setWithPhotos] = useState(true);
+  const [photoProgress, setPhotoProgress] = useState("");
 
   const inRange = (d) => { const k = mk(d); return k >= from && k <= to; };
   const storeOk = (s) => store === "전체" || s === store;
@@ -50,9 +54,30 @@ export default function TaxExportView({ storeOptions, receipts, sales, payments,
       const zip = new JSZip();
       const { r, s, p } = data;
 
+      const safe = (v) => String(v || "").replace(/[\\/:*?"<>|\s]+/g, "_");
+      const photoName = (x) => `${x.date}_${safe(x.store)}_${safe(x.vendor)}_${num(x.total)}_${String(x.id).slice(0, 6)}.jpg`;
+      let photoCount = 0, photoMissing = 0;
+      if (withPhotos) {
+        const targets = r.filter((x) => x.hasPhoto);
+        const folder = zip.folder("영수증사진");
+        for (let i = 0; i < targets.length; i += 8) {
+          setPhotoProgress(`사진 가져오는 중 ${Math.min(i + 8, targets.length)}/${targets.length}`);
+          await Promise.all(targets.slice(i, i + 8).map(async (x) => {
+            try {
+              const snap = await getDoc(doc(db, "companies", companyId, "photos", x.id));
+              if (snap.exists()) {
+                folder.file(photoName(x), snap.data().dataUrl.split(",")[1], { base64: true });
+                x._photoFile = photoName(x); photoCount++;
+              } else photoMissing++;
+            } catch (e) { photoMissing++; }
+          }));
+        }
+        setPhotoProgress("");
+      }
+
       zip.file("1_매입내역(영수증별).csv", toCsv([
-        ["날짜", "매장", "구매처", "합계금액", "결제구분", "결제수단", "지급예정일", "메모"],
-        ...r.map((x) => [x.date, x.store, x.vendor, num(x.total), x.paymentType || "", x.paymentMethod || "", x.dueDate || "", x.memo || ""]),
+        ["날짜", "매장", "구매처", "합계금액", "결제구분", "결제수단", "지급예정일", "메모", "사진파일"],
+        ...r.map((x) => [x.date, x.store, x.vendor, num(x.total), x.paymentType || "", x.paymentMethod || "", x.dueDate || "", x.memo || "", x._photoFile ? "영수증사진/" + x._photoFile : ""]),
       ]));
 
       zip.file("2_매입품목상세.csv", toCsv([
@@ -100,7 +125,7 @@ export default function TaxExportView({ storeOptions, receipts, sales, payments,
 
       zip.file("읽어주세요.txt",
         `BillNote 세무자료\r\n회사: ${companyName || ""}\r\n기간: ${from} ~ ${to}\r\n매장: ${store}\r\n생성일: ${new Date().toISOString().slice(0, 10)}\r\n\r\n` +
-        `- 모든 CSV 파일은 엑셀에서 바로 열 수 있습니다.\r\n- 금액은 영수증 판독값이며 부가세 구분은 포함되어 있지 않습니다.\r\n- 영수증 원본 사진은 포함되어 있지 않습니다(앱에 사진을 저장하지 않음). 원본은 별도로 보관해 주세요.\r\n`);
+        `- 모든 CSV 파일은 엑셀에서 바로 열 수 있습니다.\r\n- 금액은 영수증 판독값이며 부가세 구분은 포함되어 있지 않습니다.\r\n- 영수증 사진은 '영수증사진' 폴더에 들어 있습니다(${photoCount}장). 사진 저장 기능 도입 이전 영수증은 사진이 없습니다.\r\n`);
 
       const blob = await zip.generateAsync({ type: "blob" });
       const a = document.createElement("a");
@@ -133,12 +158,16 @@ export default function TaxExportView({ storeOptions, receipts, sales, payments,
           매출 입력 {data.s.length}일 · 매출 {totalSales.toLocaleString("ko-KR")}원<br />
           후불 입금 {data.p.length}건
         </div>
+        <label style={{ display: "block", fontSize: 13, marginBottom: 10 }}>
+          <input type="checkbox" checked={withPhotos} onChange={(e) => setWithPhotos(e.target.checked)} /> 영수증 사진 포함 ({data.r.filter((x) => x.hasPhoto).length}장)
+        </label>
         <button className="fab-btn" style={{ position: "static" }} onClick={makeZip} disabled={busy || (!data.r.length && !data.s.length)}>
           {busy ? <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> : <FileArchive size={16} />} ZIP 파일 내려받기
         </button>
+        {photoProgress && <div style={{ fontSize: 13, marginTop: 8 }}>{photoProgress}</div>}
         {err && <div style={{ color: "var(--stamp)", marginTop: 8, fontSize: 13 }}>{err}</div>}
         <p style={{ fontSize: 12, opacity: 0.7, marginTop: 12 }}>
-          매입내역, 품목상세, 구매처별 합계, 매출, 월별요약, 후불입금 내역이 CSV(엑셀)로 들어갑니다. 영수증 원본 사진은 포함되지 않습니다.
+          매입내역, 품목상세, 구매처별 합계, 매출, 월별요약, 후불입금 내역이 CSV(엑셀)로, 영수증 사진은 폴더로 들어갑니다.
         </p>
       </div>
     </div>

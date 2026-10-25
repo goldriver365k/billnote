@@ -90,6 +90,33 @@ function fileToBase64(file) {
   });
 }
 
+// shrink a photo to a JPEG that fits comfortably inside a Firestore document
+async function compressImage(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = () => rej(new Error("이미지를 열지 못했습니다"));
+      i.src = url;
+    });
+    const attempts = [[1600, 0.8], [1400, 0.7], [1200, 0.6], [1000, 0.55]];
+    let dataUrl = "";
+    for (const [maxDim, q] of attempts) {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * scale);
+      c.height = Math.round(img.height * scale);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      dataUrl = c.toDataURL("image/jpeg", q);
+      if (dataUrl.length < 700000) break;
+    }
+    return { dataUrl, base64: dataUrl.split(",")[1], mediaType: "image/jpeg" };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 async function analyzeReceipt(base64, mediaType) {
   const response = await fetch("/.netlify/functions/analyze-receipt", {
     method: "POST",
@@ -134,7 +161,7 @@ function MonthPicker({ value, availableMonths, onChange }) {
   );
 }
 
-function TapeCard({ receipt, onEdit, onDelete, onSetPaymentType, showStore }) {
+function TapeCard({ receipt, onEdit, onDelete, onSetPaymentType, showStore, onViewPhoto }) {
   const { big, dow, year } = prettyDate(receipt.date);
   return (
     <div className="tape">
@@ -145,6 +172,11 @@ function TapeCard({ receipt, onEdit, onDelete, onSetPaymentType, showStore }) {
           {receipt.paymentType === "후불" && <span className="paid-later-badge">후불</span>}
         </div>
         <div className="tape-actions">
+          {receipt.hasPhoto && onViewPhoto && (
+            <button className="icon-btn" onClick={() => onViewPhoto(receipt.id)} aria-label="영수증 사진">
+              <ImageIcon size={14} />
+            </button>
+          )}
           <button className="icon-btn" onClick={() => onEdit(receipt)} aria-label="수정">
             <Pencil size={14} />
           </button>
@@ -1251,13 +1283,13 @@ export default function App() {
       setProgress({ done: i, total: files.length });
       try {
         const file = files[i];
-        const base64 = await fileToBase64(file);
-        const parsed = await analyzeReceipt(base64, file.type || "image/jpeg");
+        const img = await compressImage(file);
+        const parsed = await analyzeReceipt(img.base64, img.mediaType);
         parsed.store = isAdmin ? "" : session.storeName;
         const key = receiptKey(parsed);
         if (existing.has(key) || seenKeysRef.current.has(key)) { dup++; continue; }
         seenKeysRef.current.add(key);
-        enqueueParsed({ id: null, ...parsed });
+        enqueueParsed({ id: null, ...parsed, _photo: img.dataUrl });
       } catch (e) {
         fail++;
       }
@@ -1278,17 +1310,37 @@ export default function App() {
 
   const saveReceipt = async (r) => {
     try {
-      const { id, ...rest } = r;
+      const { id, _photo, ...rest } = r;
       if (id) {
         await setDoc(doc(db, "companies", companyId, "receipts", id), rest, { merge: true });
       } else {
-        await addDoc(collection(db, "companies", companyId, "receipts"), { ...rest, createdAt: Date.now() });
+        const ref = await addDoc(collection(db, "companies", companyId, "receipts"), { ...rest, hasPhoto: !!_photo, createdAt: Date.now() });
+        if (_photo) {
+          try {
+            await setDoc(doc(db, "companies", companyId, "photos", ref.id), { dataUrl: _photo, createdAt: Date.now() });
+          } catch (pe) {
+            console.error("사진 저장 실패", pe);
+            await setDoc(ref, { hasPhoto: false }, { merge: true });
+            setError("영수증은 저장했지만 사진 저장에 실패했습니다");
+          }
+        }
       }
     } catch (e) {
       console.error("저장 실패", e);
       setError("저장에 실패했습니다");
     }
     showNext();
+  };
+
+  const [photoView, setPhotoView] = useState(null); // {loading, dataUrl}
+  const viewPhoto = async (id) => {
+    setPhotoView({ loading: true });
+    try {
+      const snap = await getDoc(doc(db, "companies", companyId, "photos", id));
+      setPhotoView(snap.exists() ? { dataUrl: snap.data().dataUrl } : { missing: true });
+    } catch (e) {
+      setPhotoView({ missing: true });
+    }
   };
 
   const cancelPending = () => showNext();
@@ -1301,6 +1353,7 @@ export default function App() {
     }
     try {
       await deleteDoc(doc(db, "companies", companyId, "receipts", id));
+      deleteDoc(doc(db, "companies", companyId, "photos", id)).catch(() => {});
     } catch (e) {
       console.error("삭제 실패", e);
       setError("삭제에 실패했습니다: " + (e.message || ""));
@@ -1681,7 +1734,7 @@ export default function App() {
         {tab === "manage" && isAdmin && <StoreAdminPanel config={config} onUpdateConfig={persistConfig} onUpdateCompanyCode={updateCompanyCode} onMigrateOldData={migrateOldData} />}
 
         {tab === "tax" && isAdmin && (
-          <TaxExportView storeOptions={config.stores.map((s) => s.name)} receipts={receipts} sales={sales} payments={payments} companyName={config.companyName || ""} defaultMonth={selectedMonth} />
+          <TaxExportView companyId={companyId} storeOptions={config.stores.map((s) => s.name)} receipts={receipts} sales={sales} payments={payments} companyName={config.companyName || ""} defaultMonth={selectedMonth} />
         )}
 
         {tab === "debt" && (
@@ -1726,7 +1779,7 @@ export default function App() {
               <div className="value">{won(sumTotal(byDay[d]))}</div>
             </div>
             <div className="cards-wrap">
-              {byDay[d].map((r) => <TapeCard key={r.id} receipt={r} onEdit={editReceipt} onDelete={deleteReceipt} onSetPaymentType={setReceiptPaymentType} showStore={isAdmin} />)}
+              {byDay[d].map((r) => <TapeCard key={r.id} receipt={r} onEdit={editReceipt} onDelete={deleteReceipt} onSetPaymentType={setReceiptPaymentType} onViewPhoto={viewPhoto} showStore={isAdmin} />)}
             </div>
           </div>
         ))}
@@ -1753,7 +1806,7 @@ export default function App() {
                   <div className="value">{won(sumTotal(byMonth[m]))}</div>
                 </div>
                 <div className="cards-wrap">
-                  {byMonth[m].map((r) => <TapeCard key={r.id} receipt={r} onEdit={editReceipt} onDelete={deleteReceipt} onSetPaymentType={setReceiptPaymentType} showStore={isAdmin} />)}
+                  {byMonth[m].map((r) => <TapeCard key={r.id} receipt={r} onEdit={editReceipt} onDelete={deleteReceipt} onSetPaymentType={setReceiptPaymentType} onViewPhoto={viewPhoto} showStore={isAdmin} />)}
                 </div>
               </div>
             ))}
@@ -1767,7 +1820,7 @@ export default function App() {
               <div className="value">{won(sumTotal(byStore[s]))}</div>
             </div>
             <div className="cards-wrap">
-              {byStore[s].map((r) => <TapeCard key={r.id} receipt={r} onEdit={editReceipt} onDelete={deleteReceipt} onSetPaymentType={setReceiptPaymentType} showStore={false} />)}
+              {byStore[s].map((r) => <TapeCard key={r.id} receipt={r} onEdit={editReceipt} onDelete={deleteReceipt} onSetPaymentType={setReceiptPaymentType} onViewPhoto={viewPhoto} showStore={false} />)}
             </div>
           </div>
         ))}
@@ -1816,7 +1869,7 @@ export default function App() {
                     .slice()
                     .sort((a, b) => (a.date < b.date ? 1 : -1))
                     .map((r) => (
-                      <TapeCard key={r.id} receipt={r} onEdit={editReceipt} onDelete={deleteReceipt} onSetPaymentType={setReceiptPaymentType} showStore={isAdmin} />
+                      <TapeCard key={r.id} receipt={r} onEdit={editReceipt} onDelete={deleteReceipt} onSetPaymentType={setReceiptPaymentType} onViewPhoto={viewPhoto} showStore={isAdmin} />
                     ))}
                 </div>
               </>
@@ -1827,7 +1880,7 @@ export default function App() {
         {tab === "all" && receiptsLoaded && (
           <div className="cards-wrap">
             {monthReceipts.slice().sort((a, b) => (a.date < b.date ? 1 : -1)).map((r) => (
-              <TapeCard key={r.id} receipt={r} onEdit={editReceipt} onDelete={deleteReceipt} onSetPaymentType={setReceiptPaymentType} showStore={isAdmin} />
+              <TapeCard key={r.id} receipt={r} onEdit={editReceipt} onDelete={deleteReceipt} onSetPaymentType={setReceiptPaymentType} onViewPhoto={viewPhoto} showStore={isAdmin} />
             ))}
           </div>
         )}
@@ -1844,6 +1897,17 @@ export default function App() {
       {analyzing && <div className="analyzing-banner"><Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> 영수증 판독 중{progress ? ` (${Math.min(progress.done + 1, progress.total)}/${progress.total})` : "..."}</div>}
       {notice && !analyzing && <div className="analyzing-banner">{notice}</div>}
       {error && !analyzing && <div className="error-banner">{error}</div>}
+
+      {photoView && (
+        <div className="modal-backdrop" onClick={() => setPhotoView(null)} style={{ zIndex: 1100, alignItems: "center" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 12, padding: 10, maxWidth: "94vw", maxHeight: "92vh", overflow: "auto" }}>
+            {photoView.loading && <div style={{ padding: 30 }}><Loader2 size={20} style={{ animation: "spin 1s linear infinite" }} /> 불러오는 중...</div>}
+            {photoView.missing && <div style={{ padding: 30 }}>사진을 찾을 수 없습니다</div>}
+            {photoView.dataUrl && <img src={photoView.dataUrl} alt="영수증" style={{ maxWidth: "100%", display: "block" }} />}
+            <button className="btn-secondary" style={{ marginTop: 8, width: "100%" }} onClick={() => setPhotoView(null)}>닫기</button>
+          </div>
+        </div>
+      )}
 
       {pending && queueCount > 0 && <div className="analyzing-banner" style={{ top: 12, bottom: "auto", zIndex: 1000 }}>대기 중인 영수증 {queueCount}장 더 있음</div>}
       {pending && (
