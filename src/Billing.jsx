@@ -82,7 +82,6 @@ export function WelcomeModal({ company, onClose, onMore }) {
           <div style={{ fontSize: 13, marginTop: 4 }}>{fmt(until)}까지 모든 기능을 무료로 사용하실 수 있습니다.</div>
         </div>
         <div style={{ fontSize: 13, marginTop: 10, lineHeight: 1.7 }}>
-          무료 기간이 끝나면 유료 결제 안내 창이 자동으로 나타납니다.<br />
           요금 등 자세한 내용은 <b>설명서</b> 탭에서 확인하세요.
         </div>
         <button className="btn-primary" style={{ width: "100%", marginTop: 14 }} onClick={onClose}>시작하기</button>
