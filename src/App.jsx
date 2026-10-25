@@ -1871,10 +1871,10 @@ export default function App() {
           <p>사진 한 장으로 매장 지출을 자동 정리합니다</p>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
-        <div className="who-badge">
-          {isAdmin ? <ShieldCheck size={14} /> : <Store size={14} />}
-          {isAdmin ? "사업주" : session.storeName}
-          <button onClick={handleLogout} aria-label="로그아웃"><LogOut size={14} /></button>
+        <div className="who-badge" onClick={isAdmin ? handleLogout : undefined} style={isAdmin ? { cursor: "pointer" } : undefined}>
+          {isAdmin ? <LogOut size={14} /> : <Store size={14} />}
+          {isAdmin ? <b>로그아웃</b> : session.storeName}
+          {!isAdmin && <button onClick={handleLogout} aria-label="로그아웃"><LogOut size={14} /></button>}
         </div>
         <a href={KAKAO_URL} target="_blank" rel="noopener noreferrer" style={{ padding: "5px 12px", borderRadius: 999, background: "#FEE500", color: "#191919", fontWeight: 700, fontSize: 12.5, textDecoration: "none" }}>💬 카톡 문의</a>
         </div>
@@ -1896,7 +1896,6 @@ export default function App() {
         {isAdmin && <button className={`tab-btn ${tab === "tax" ? "active" : ""}`} onClick={() => setTab("tax")}><FileArchive size={14} /> 세무자료</button>}
         <button className={`tab-btn ${tab === "all" ? "active" : ""}`} onClick={() => setTab("all")}><Receipt size={14} /> 전체</button>
         <button className={`tab-btn ${tab === "manual" ? "active" : ""}`} onClick={() => setTab("manual")}><BookOpen size={14} /> 설명서</button>
-        <a className="tab-btn" href={KAKAO_URL} target="_blank" rel="noopener noreferrer" style={{ background: "#FEE500", color: "#191919", textDecoration: "none", fontWeight: 700 }}>💬 카톡문의</a>
         {isAdmin && <button className={`tab-btn ${tab === "manage" ? "active" : ""}`} onClick={() => setTab("manage")}><Settings size={14} /> 매장 관리</button>}
       </div>
 
