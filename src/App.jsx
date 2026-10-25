@@ -21,6 +21,7 @@ import {
   TrendingUp,
   ChevronDown,
   Wallet,
+  FileArchive,
 } from "lucide-react";
 import {
   BarChart,
@@ -35,6 +36,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { db, auth, googleProvider } from "./firebase";
+import TaxExportView from "./TaxExport";
 import {
   collection,
   doc,
@@ -1670,12 +1672,17 @@ export default function App() {
         <button className={`tab-btn ${tab === "vendor" ? "active" : ""}`} onClick={() => setTab("vendor")}><Truck size={14} /> 구매처</button>
         <button className={`tab-btn ${tab === "debt" ? "active" : ""}`} onClick={() => setTab("debt")}><Wallet size={14} /> 후불관리</button>
         <button className={`tab-btn ${tab === "sales" ? "active" : ""}`} onClick={() => setTab("sales")}><TrendingUp size={14} /> 매출/원가율</button>
+        {isAdmin && <button className={`tab-btn ${tab === "tax" ? "active" : ""}`} onClick={() => setTab("tax")}><FileArchive size={14} /> 세무자료</button>}
         <button className={`tab-btn ${tab === "all" ? "active" : ""}`} onClick={() => setTab("all")}><Receipt size={14} /> 전체</button>
         {isAdmin && <button className={`tab-btn ${tab === "manage" ? "active" : ""}`} onClick={() => setTab("manage")}><Settings size={14} /> 매장 관리</button>}
       </div>
 
       <div className="content">
         {tab === "manage" && isAdmin && <StoreAdminPanel config={config} onUpdateConfig={persistConfig} onUpdateCompanyCode={updateCompanyCode} onMigrateOldData={migrateOldData} />}
+
+        {tab === "tax" && isAdmin && (
+          <TaxExportView storeOptions={config.stores.map((s) => s.name)} receipts={receipts} sales={sales} payments={payments} companyName={config.companyName || ""} defaultMonth={selectedMonth} />
+        )}
 
         {tab === "debt" && (
           <DebtView
