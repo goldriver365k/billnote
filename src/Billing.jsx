@@ -86,6 +86,10 @@ export function WelcomeModal({ company, onClose, onMore }) {
         </div>
         <button className="btn-primary" style={{ width: "100%", marginTop: 14 }} onClick={onClose}>시작하기</button>
         <button className="btn-secondary" style={{ width: "100%", marginTop: 8 }} onClick={onMore}>요금 자세히 보기 (설명서)</button>
+        <a href={KAKAO_URL} target="_blank" rel="noopener noreferrer"
+          style={{ display: "block", textAlign: "center", marginTop: 8, padding: "11px 10px", borderRadius: 10, background: "#FEE500", color: "#191919", fontWeight: 700, textDecoration: "none" }}>
+          카카오톡으로 문의하기
+        </a>
       </div>
     </div>
   );

@@ -41,7 +41,7 @@ import TaxExportView from "./TaxExport";
 import CameraCapture from "./CameraCapture";
 import { AdminLogin, AdminDenied } from "./AdminPage";
 import { AddToHomeModal, isStandalone } from "./AddToHome";
-import { computeStatus, summarize, BillingBanner, BillingModal, WelcomeModal, PlatformAdminPanel, isPlatformOperator } from "./Billing";
+import { computeStatus, summarize, BillingBanner, BillingModal, WelcomeModal, PlatformAdminPanel, KAKAO_URL, isPlatformOperator } from "./Billing";
 import {
   collection,
   doc,
@@ -1870,10 +1870,13 @@ export default function App() {
           <h1><Receipt size={22} /> 영수증 장부</h1>
           <p>사진 한 장으로 매장 지출을 자동 정리합니다</p>
         </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
         <div className="who-badge">
           {isAdmin ? <ShieldCheck size={14} /> : <Store size={14} />}
           {isAdmin ? "사업주" : session.storeName}
           <button onClick={handleLogout} aria-label="로그아웃"><LogOut size={14} /></button>
+        </div>
+        <a href={KAKAO_URL} target="_blank" rel="noopener noreferrer" style={{ padding: "5px 12px", borderRadius: 999, background: "#FEE500", color: "#191919", fontWeight: 700, fontSize: 12.5, textDecoration: "none" }}>💬 카톡 문의</a>
         </div>
       </div>
 
@@ -1893,6 +1896,7 @@ export default function App() {
         {isAdmin && <button className={`tab-btn ${tab === "tax" ? "active" : ""}`} onClick={() => setTab("tax")}><FileArchive size={14} /> 세무자료</button>}
         <button className={`tab-btn ${tab === "all" ? "active" : ""}`} onClick={() => setTab("all")}><Receipt size={14} /> 전체</button>
         <button className={`tab-btn ${tab === "manual" ? "active" : ""}`} onClick={() => setTab("manual")}><BookOpen size={14} /> 설명서</button>
+        <a className="tab-btn" href={KAKAO_URL} target="_blank" rel="noopener noreferrer" style={{ background: "#FEE500", color: "#191919", textDecoration: "none", fontWeight: 700 }}>💬 카톡문의</a>
         {isAdmin && <button className={`tab-btn ${tab === "manage" ? "active" : ""}`} onClick={() => setTab("manage")}><Settings size={14} /> 매장 관리</button>}
       </div>
 
@@ -2060,6 +2064,9 @@ export default function App() {
         )}
       </div>
 
+      <div style={{ textAlign: "center", padding: "12px 12px 0" }}>
+        <a href={KAKAO_URL} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", padding: "10px 22px", borderRadius: 10, background: "#FEE500", color: "#191919", fontWeight: 700, fontSize: 14, textDecoration: "none" }}>💬 카카오톡으로 문의하기</a>
+      </div>
       <div style={{ textAlign: "center", fontSize: 11, opacity: 0.6, padding: "16px 12px 110px" }}>
         다운로드한 자료는 1개월 후 삭제되며, 모든 자료는 등록 {PHOTO_KEEP_MONTHS}개월 후 삭제됩니다.<br />
         <button onClick={() => setA2hsOpen(true)} style={{ background: "none", border: "none", textDecoration: "underline", color: "inherit", fontSize: 11, cursor: "pointer", marginTop: 4 }}>휴대폰 바탕화면에 추가하는 방법</button>
