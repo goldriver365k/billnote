@@ -38,6 +38,7 @@ import {
 import { db, auth, googleProvider } from "./firebase";
 import TaxExportView from "./TaxExport";
 import CameraCapture from "./CameraCapture";
+import { computeStatus, BillingBanner, BillingModal, PlatformAdminPanel, PLATFORM_ADMIN_EMAIL } from "./Billing";
 import {
   collection,
   doc,
@@ -1059,7 +1060,7 @@ export default function App() {
     const cred = await createUserWithEmailAndPassword(auth, email, pw);
     const uid = cred.user.uid;
     const code = generateCompanyCode();
-    await setDoc(doc(db, "companies", uid), { companyName, email, companyCode: code, createdAt: Date.now() });
+    await setDoc(doc(db, "companies", uid), { companyName, email, companyCode: code, createdAt: Date.now(), trialStartedAt: Date.now() });
     await setDoc(doc(db, "companyCodes", code), { companyId: uid });
     await setDoc(doc(db, "companies", uid, "config", "store"), { stores: [], companyCode: code });
     return code;
@@ -1080,7 +1081,7 @@ export default function App() {
     if (!pendingGoogleUser) return null;
     const { uid, email } = pendingGoogleUser;
     const code = generateCompanyCode();
-    await setDoc(doc(db, "companies", uid), { companyName, email, companyCode: code, createdAt: Date.now() });
+    await setDoc(doc(db, "companies", uid), { companyName, email, companyCode: code, createdAt: Date.now(), trialStartedAt: Date.now() });
     await setDoc(doc(db, "companyCodes", code), { companyId: uid });
     await setDoc(doc(db, "companies", uid, "config", "store"), { stores: [], companyCode: code });
     return code;
@@ -1275,6 +1276,7 @@ export default function App() {
 
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return;
+    if (blockIfExpired()) return;
     setError("");
     setNotice("");
     setAnalyzing(true);
@@ -1314,6 +1316,7 @@ export default function App() {
   };
 
   const saveReceipt = async (r) => {
+    if (!r.id && blockIfExpired()) { showNext(); return; }
     try {
       const { id, _photo, ...rest } = r;
       if (id) {
@@ -1335,6 +1338,38 @@ export default function App() {
       setError("저장에 실패했습니다");
     }
     showNext();
+  };
+
+  // ---- subscription: 7-day trial, then paid ----
+  const [companyDoc, setCompanyDoc] = useState(null);
+  const [billingInfo, setBillingInfo] = useState(null);
+  const [billingOpen, setBillingOpen] = useState(false);
+  useEffect(() => {
+    if (!companyId) { setCompanyDoc(null); return; }
+    return onSnapshot(doc(db, "companies", companyId), (snap) => {
+      const data = snap.exists() ? snap.data() : null;
+      setCompanyDoc(data);
+      // existing companies without a trial start get one now
+      if (data && !data.trialStartedAt && authUser && !authUser.isAnonymous) {
+        setDoc(doc(db, "companies", companyId), { trialStartedAt: Date.now() }, { merge: true }).catch(() => {});
+      }
+    }, (e) => console.error("회사 정보 불러오기 실패", e));
+  }, [companyId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!companyId) return;
+    return onSnapshot(doc(db, "config", "billing"), (snap) => setBillingInfo(snap.exists() ? snap.data() : null), () => {});
+  }, [companyId]);
+  const isPlatformOwner = !!authUser && !authUser.isAnonymous && authUser.email === PLATFORM_ADMIN_EMAIL;
+  const monthCount = (() => {
+    const d = new Date();
+    const start = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+    return receipts.filter((r) => (r.createdAt || 0) >= start).length;
+  })();
+  const billing = computeStatus(companyDoc, isPlatformOwner, monthCount);
+  const blockIfExpired = () => {
+    if (billing.canAdd) return false;
+    setBillingOpen(true);
+    return true;
   };
 
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -1414,6 +1449,7 @@ export default function App() {
   };
 
   const saveSale = async ({ store, date, amount }) => {
+    if (blockIfExpired()) return;
     try {
       const id = `${store}__${date}`;
       await setDoc(doc(db, "companies", companyId, "sales", id), { store, date, amount, updatedAt: Date.now() });
@@ -1433,6 +1469,7 @@ export default function App() {
   };
 
   const saveVendorPayment = async ({ store, vendor, date, amount, method, memo }) => {
+    if (blockIfExpired()) return;
     try {
       await addDoc(collection(db, "companies", companyId, "vendorPayments"), { store, vendor, date, amount, method, memo, createdAt: Date.now() });
     } catch (e) {
@@ -1759,6 +1796,8 @@ export default function App() {
         <MonthPicker value={selectedMonth} availableMonths={availableMonths} onChange={setSelectedMonth} />
       </div>
 
+      <BillingBanner status={billing} onOpen={() => setBillingOpen(true)} />
+
       <div className="tabs">
         <button className={`tab-btn ${tab === "daily" ? "active" : ""}`} onClick={() => setTab("daily")}><Calendar size={14} /> 일별</button>
         <button className={`tab-btn ${tab === "monthly" ? "active" : ""}`} onClick={() => setTab("monthly")}><CalendarDays size={14} /> 월별</button>
@@ -1768,11 +1807,14 @@ export default function App() {
         <button className={`tab-btn ${tab === "sales" ? "active" : ""}`} onClick={() => setTab("sales")}><TrendingUp size={14} /> 매출/원가율</button>
         {isAdmin && <button className={`tab-btn ${tab === "tax" ? "active" : ""}`} onClick={() => setTab("tax")}><FileArchive size={14} /> 세무자료</button>}
         <button className={`tab-btn ${tab === "all" ? "active" : ""}`} onClick={() => setTab("all")}><Receipt size={14} /> 전체</button>
+        {isPlatformOwner && <button className={`tab-btn ${tab === "platform" ? "active" : ""}`} onClick={() => setTab("platform")}><ShieldCheck size={14} /> 운영자</button>}
         {isAdmin && <button className={`tab-btn ${tab === "manage" ? "active" : ""}`} onClick={() => setTab("manage")}><Settings size={14} /> 매장 관리</button>}
       </div>
 
       <div className="content">
         {tab === "manage" && isAdmin && <StoreAdminPanel config={config} onUpdateConfig={persistConfig} onUpdateCompanyCode={updateCompanyCode} onMigrateOldData={migrateOldData} />}
+
+        {tab === "platform" && isPlatformOwner && <PlatformAdminPanel billing={billingInfo} />}
 
         {tab === "tax" && isAdmin && (
           <TaxExportView registeredAt={registeredAt} keepMonths={PHOTO_KEEP_MONTHS} companyId={companyId} storeOptions={config.stores.map((s) => s.name)} receipts={receipts} sales={sales} payments={payments} companyName={config.companyName || ""} defaultMonth={selectedMonth} />
@@ -1935,13 +1977,15 @@ export default function App() {
       <input ref={galleryInputRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={onPickFile} />
 
       <div className="fab">
-        <button className="fab-btn secondary" onClick={() => galleryInputRef.current?.click()}><ImageIcon size={16} /> 앨범에서 여러 장 선택</button>
-        <button className="fab-btn" onClick={() => setCameraOpen(true)}><Camera size={16} /> 연속 촬영</button>
+        <button className="fab-btn secondary" onClick={() => { if (!blockIfExpired()) galleryInputRef.current?.click(); }}><ImageIcon size={16} /> 앨범에서 여러 장 선택</button>
+        <button className="fab-btn" onClick={() => { if (!blockIfExpired()) setCameraOpen(true); }}><Camera size={16} /> 연속 촬영</button>
       </div>
 
       {analyzing && <div className="analyzing-banner"><Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> 영수증 판독 중{progress ? ` (${Math.min(progress.done + 1, progress.total)}/${progress.total})` : "..."}</div>}
       {notice && !analyzing && <div className="analyzing-banner">{notice}</div>}
       {error && !analyzing && <div className="error-banner">{error}</div>}
+
+      {billingOpen && <BillingModal status={billing} billing={billingInfo} company={companyDoc} onClose={() => setBillingOpen(false)} />}
 
       {cameraOpen && (
         <CameraCapture
