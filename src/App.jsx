@@ -37,6 +37,7 @@ import {
 } from "recharts";
 import { db, auth, googleProvider } from "./firebase";
 import TaxExportView from "./TaxExport";
+import CameraCapture from "./CameraCapture";
 import {
   collection,
   doc,
@@ -1242,6 +1243,7 @@ export default function App() {
   const queueRef = useRef([]);
   const pendingRef = useRef(null);
   const seenKeysRef = useRef(new Set());
+  const seenImgRef = useRef(new Set());
   const [queueCount, setQueueCount] = useState(0);
   const [progress, setProgress] = useState(null); // {done,total}
   const [notice, setNotice] = useState("");
@@ -1258,7 +1260,7 @@ export default function App() {
   const showNext = () => {
     const next = queueRef.current.shift() || null;
     setQueueCount(queueRef.current.length);
-    if (!next) seenKeysRef.current = new Set();
+    if (!next) { seenKeysRef.current = new Set(); seenImgRef.current = new Set(); }
     setPendingBoth(next);
   };
 
@@ -1284,6 +1286,9 @@ export default function App() {
       try {
         const file = files[i];
         const img = await compressImage(file);
+        const imgSig = img.dataUrl.length + ":" + img.dataUrl.slice(2000, 2200) + img.dataUrl.slice(-200);
+        if (seenImgRef.current.has(imgSig)) { dup++; continue; }
+        seenImgRef.current.add(imgSig);
         const parsed = await analyzeReceipt(img.base64, img.mediaType);
         parsed.store = isAdmin ? "" : session.storeName;
         const key = receiptKey(parsed);
@@ -1332,6 +1337,7 @@ export default function App() {
     showNext();
   };
 
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [photoView, setPhotoView] = useState(null); // {loading, dataUrl}
   // ALL data is deleted 6 months after registration; downloaded archives 1 month after download
   const PHOTO_KEEP_MONTHS = 6;
@@ -1930,12 +1936,20 @@ export default function App() {
 
       <div className="fab">
         <button className="fab-btn secondary" onClick={() => galleryInputRef.current?.click()}><ImageIcon size={16} /> 앨범에서 여러 장 선택</button>
-        <button className="fab-btn" onClick={() => fileInputRef.current?.click()}><Camera size={16} /> 촬영하기</button>
+        <button className="fab-btn" onClick={() => setCameraOpen(true)}><Camera size={16} /> 연속 촬영</button>
       </div>
 
       {analyzing && <div className="analyzing-banner"><Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> 영수증 판독 중{progress ? ` (${Math.min(progress.done + 1, progress.total)}/${progress.total})` : "..."}</div>}
       {notice && !analyzing && <div className="analyzing-banner">{notice}</div>}
       {error && !analyzing && <div className="error-banner">{error}</div>}
+
+      {cameraOpen && (
+        <CameraCapture
+          onCancel={() => setCameraOpen(false)}
+          onDone={(files) => { setCameraOpen(false); handleFiles(files); }}
+          onUnavailable={() => { setCameraOpen(false); setError("카메라를 열 수 없어 기본 카메라로 전환합니다"); fileInputRef.current?.click(); }}
+        />
+      )}
 
       {photoView && (
         <div className="modal-backdrop" onClick={() => setPhotoView(null)} style={{ zIndex: 1100, alignItems: "center" }}>
