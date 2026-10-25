@@ -38,6 +38,7 @@ import {
 import { db, auth, googleProvider } from "./firebase";
 import TaxExportView from "./TaxExport";
 import CameraCapture from "./CameraCapture";
+import { AdminLogin, AdminDenied } from "./AdminPage";
 import { AddToHomeModal, isStandalone } from "./AddToHome";
 import { computeStatus, summarize, BillingBanner, BillingModal, PlatformAdminPanel, isPlatformOperator } from "./Billing";
 import {
@@ -1767,6 +1768,44 @@ export default function App() {
     return <div className="app-root"><style>{styles}</style><div className="empty-state">불러오는 중...</div></div>;
   }
 
+  // billnote.store/admin : operator-only. Login only (no signup / employee code); members are refused.
+  if (typeof window !== "undefined" && window.location.pathname.replace(/\/+$/, "") === "/admin") {
+    const head = (
+      <div className="header">
+        <div>
+          <h1><ShieldCheck size={22} /> BillNote 운영자</h1>
+          <p>회원사·매장 이용 기간 관리</p>
+        </div>
+        {isPlatformOwner && (
+          <div className="who-badge">
+            <a href="/" style={{ color: "inherit", marginRight: 8 }}>앱으로</a>
+            <button onClick={() => signOut(auth)} aria-label="로그아웃"><LogOut size={14} /></button>
+          </div>
+        )}
+      </div>
+    );
+    let body;
+    if (!authUser || authUser.isAnonymous) {
+      body = (
+        <AdminLogin
+          onGoogle={() => signInWithPopup(auth, googleProvider)}
+          onEmail={(email, pw) => signInWithEmailAndPassword(auth, email, pw)}
+        />
+      );
+    } else if (!isPlatformOwner) {
+      body = <AdminDenied email={authUser.email} onLogout={() => signOut(auth)} />;
+    } else {
+      body = <div className="content"><PlatformAdminPanel billing={billingInfo} /></div>;
+    }
+    return (
+      <div className="app-root">
+        <style>{styles}</style>
+        {head}
+        {body}
+      </div>
+    );
+  }
+
   if (!authUser || (authUser.isAnonymous && !companyId)) {
     return (
       <div className="app-root">
@@ -1805,36 +1844,6 @@ export default function App() {
       setSession(null);
     }
   };
-
-  // billnote.store/admin : operator-only page
-  if (typeof window !== "undefined" && window.location.pathname.replace(/\/+$/, "") === "/admin") {
-    return (
-      <div className="app-root">
-        <style>{styles}</style>
-        <div className="header">
-          <div>
-            <h1><ShieldCheck size={22} /> BillNote 운영자</h1>
-            <p>회원사·매장 이용 기간 관리</p>
-          </div>
-          <div className="who-badge">
-            <a href="/" style={{ color: "inherit", marginRight: 8 }}>앱으로</a>
-            <button onClick={handleLogout} aria-label="로그아웃"><LogOut size={14} /></button>
-          </div>
-        </div>
-        <div className="content">
-          {isPlatformOwner ? (
-            <PlatformAdminPanel billing={billingInfo} />
-          ) : (
-            <div className="tape-empty">
-              운영자 계정으로 로그인해야 볼 수 있습니다.<br />
-              로그인 화면의 <b>구글로 계속하기</b>로 운영자 계정에 로그인해 주세요.<br /><br />
-              <a href="/">앱으로 돌아가기</a> · <button className="btn-secondary" onClick={handleLogout}>다른 계정으로 로그인</button>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="app-root">
