@@ -1401,6 +1401,16 @@ export default function App() {
   const billingStores = (config.stores || []).filter((s) => (isAdmin ? true : s.name === session?.storeName));
   const billingList = billingStores.map((s) => ({ name: s.name, st: storeStatusFor(s.name) }));
   const billingSummary = summarize(billingList);
+  // every visit: short guide popup (after the signup/billing popups are closed)
+  const [introOpen, setIntroOpen] = useState(false);
+  const introShown = useRef(false);
+  useEffect(() => {
+    if (introShown.current || !companyId || !authUser || !companyDoc) return;
+    if (typeof window !== "undefined" && window.location.pathname.replace(/\/+$/, "") === "/admin") return;
+    if (a2hsOpen || welcomePending || welcomeBilling || billingOpen || billingSummary.kind === "expired") return;
+    introShown.current = true;
+    setIntroOpen(true);
+  }, [companyId, authUser, companyDoc, a2hsOpen, welcomePending, welcomeBilling, billingOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   // pop the payment guide up automatically once the free/paid period has ended (once per visit)
   const billingPopupShown = useRef(false);
   useEffect(() => {
@@ -2083,6 +2093,16 @@ export default function App() {
       {notice && !analyzing && <div className="analyzing-banner">{notice}</div>}
       {error && !analyzing && <div className="error-banner">{error}</div>}
 
+      {introOpen && (
+        <div className="modal-backdrop" onClick={() => setIntroOpen(false)} style={{ zIndex: 1400, alignItems: "center" }}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ borderRadius: 16, maxWidth: 340, textAlign: "center" }}>
+            <div style={{ fontSize: 44, lineHeight: 1 }}>📸</div>
+            <h3 style={{ margin: "10px 0 6px", fontSize: 20, lineHeight: 1.5 }}>영수증을 사진 찍어 올리세요</h3>
+            <div style={{ fontSize: 17, fontWeight: 700, color: "#0B3FA8" }}>자동 정리됩니다</div>
+            <button className="btn-primary" style={{ width: "100%", marginTop: 16 }} onClick={() => setIntroOpen(false)}>확인</button>
+          </div>
+        </div>
+      )}
       {a2hsOpen && <AddToHomeModal onClose={() => setA2hsOpen(false)} />}
 
       {billingOpen && <BillingModal list={billingList} billing={billingInfo} company={companyDoc} onClose={() => setBillingOpen(false)} />}
