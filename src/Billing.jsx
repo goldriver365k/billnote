@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { doc, getDoc, getDocs, setDoc, collection } from "firebase/firestore";
+import { doc, getDoc, getDocs, setDoc, deleteDoc, collection } from "firebase/firestore";
 import { X, Loader2 } from "lucide-react";
 import { db } from "./firebase";
 
@@ -150,6 +150,17 @@ function addPeriod(base, unit) {
   return d.getTime();
 }
 
+
+// delete every doc in a collection that passes the filter (runs in small parallel groups)
+async function deleteDocsWhere(colRef, filterFn = () => true) {
+  const snap = await getDocs(colRef);
+  const targets = snap.docs.filter((d) => filterFn(d.data(), d));
+  for (let i = 0; i < targets.length; i += 20) {
+    await Promise.all(targets.slice(i, i + 20).map((d) => deleteDoc(d.ref)));
+  }
+  return targets.map((d) => d.id);
+}
+
 export function PlatformAdminPanel({ billing }) {
   const [companies, setCompanies] = useState(null);
   const [tiers, setTiers] = useState({});
@@ -190,6 +201,45 @@ export function PlatformAdminPanel({ billing }) {
     if (!window.confirm(`${s.name}의 유료 기간을 해제할까요?`)) return;
     await updateStore(c, s.name, () => ({ paidUntil: 0 }));
   };
+  // remove one store from a company, optionally with all of its data
+  const deleteStore = async (c, s) => {
+    if (!window.confirm(`[${c.companyName || c.email}] 의 매장 "${s.name}"을(를) 삭제할까요?\n\n이 매장의 영수증·사진·매출·후불 입금 자료도 모두 함께 삭제되며 복구할 수 없습니다.`)) return;
+    try {
+      const base = ["companies", c.id];
+      const ids = await deleteDocsWhere(collection(db, ...base, "receipts"), (x) => x.store === s.name);
+      await Promise.all(ids.map((id) => deleteDoc(doc(db, ...base, "photos", id)).catch(() => {})));
+      await deleteDocsWhere(collection(db, ...base, "sales"), (x) => x.store === s.name);
+      await deleteDocsWhere(collection(db, ...base, "vendorPayments"), (x) => x.store === s.name);
+      const stores = c.stores.filter((x) => x.name !== s.name);
+      await setDoc(doc(db, "companies", c.id, "config", "store"), { stores }, { merge: true });
+      setMsg(`${c.companyName || c.email} / ${s.name} 매장을 삭제했습니다`);
+      await load();
+    } catch (e) { console.error(e); setMsg("삭제 실패: " + (e.message || "")); }
+  };
+
+  // remove a whole member company (all data). The login account itself stays in Firebase Auth.
+  const deleteCompany = async (c) => {
+    if (isOperatorEmail(c.email)) { window.alert("운영자 계정의 회사는 삭제할 수 없습니다."); return; }
+    const name = c.companyName || c.email;
+    const typed = window.prompt(`회사 "${name}"의 모든 자료(매장·영수증·사진·매출·입금·보관함)를 삭제합니다. 복구할 수 없습니다.\n\n계속하려면 회사명을 똑같이 입력하세요.`);
+    if (typed === null) return;
+    if (typed.trim() !== name) { window.alert("회사명이 일치하지 않아 취소했습니다."); return; }
+    try {
+      const base = ["companies", c.id];
+      for (const col of ["receipts", "sales", "vendorPayments", "photos"]) await deleteDocsWhere(collection(db, ...base, col));
+      const arch = await getDocs(collection(db, ...base, "taxArchives"));
+      for (const d of arch.docs) {
+        await deleteDocsWhere(collection(d.ref, "chunks"));
+        await deleteDoc(d.ref);
+      }
+      await deleteDocsWhere(collection(db, ...base, "config"));
+      if (c.companyCode) await deleteDoc(doc(db, "companyCodes", c.companyCode)).catch(() => {});
+      await deleteDoc(doc(db, "companies", c.id));
+      setMsg(`${name} 회사를 삭제했습니다`);
+      await load();
+    } catch (e) { console.error(e); setMsg("삭제 실패: " + (e.message || "")); }
+  };
+
   const extendTrial = async (c) => {
     await setDoc(doc(db, "companies", c.id), { trialStartedAt: (c.trialStartedAt || Date.now()) + 7 * DAY }, { merge: true });
     await load();
@@ -217,6 +267,7 @@ export function PlatformAdminPanel({ billing }) {
                 가입 {c.createdAt ? fmt(c.createdAt) : "-"} · 체험 ~{fmt((c.trialStartedAt || c.createdAt || Date.now()) + TRIAL_DAYS * DAY)}
                 {owner ? " · 운영자(무료)" : ""}
                 <button className="btn-secondary" style={{ marginLeft: 8 }} onClick={() => extendTrial(c)}>체험 +7일</button>
+                {!owner && <button className="btn-secondary" style={{ marginLeft: 6, color: "#b03a2e" }} onClick={() => deleteCompany(c)}>회사 삭제</button>}
               </div>
               {c.stores.length === 0 && <div style={{ opacity: 0.7, marginTop: 4 }}>등록된 매장 없음</div>}
               {c.stores.map((s) => {
@@ -234,6 +285,7 @@ export function PlatformAdminPanel({ billing }) {
                       <button className="btn-secondary" onClick={() => extend(c, s, "month")}>+1개월</button>
                       <button className="btn-secondary" onClick={() => extend(c, s, "year")}>+1년</button>
                       <button className="btn-secondary" onClick={() => clearPaid(c, s)}>유료 해제</button>
+                      {!owner && <button className="btn-secondary" style={{ color: "#b03a2e" }} onClick={() => deleteStore(c, s)}>매장 삭제</button>}
                     </div>
                   </div>
                 );
