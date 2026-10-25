@@ -71,7 +71,28 @@ export function BillingBanner({ summary, onOpen }) {
   );
 }
 
-export function BillingModal({ list, billing, company, onClose, welcome }) {
+export function WelcomeModal({ company, onClose, onMore }) {
+  const until = (company?.trialStartedAt || Date.now()) + TRIAL_DAYS * 86400000;
+  return (
+    <div className="modal-backdrop" onClick={onClose} style={{ zIndex: 1500, alignItems: "center" }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ borderRadius: 16, maxWidth: 380, textAlign: "center" }}>
+        <h3 style={{ margin: "4px 0 10px" }}>가입을 환영합니다!</h3>
+        <div style={{ background: "#e8f1ff", color: "#0B3FA8", borderRadius: 12, padding: "16px 12px", lineHeight: 1.6 }}>
+          <div style={{ fontSize: 22, fontWeight: 800 }}>가입 후 {TRIAL_DAYS}일 무료</div>
+          <div style={{ fontSize: 13, marginTop: 4 }}>{fmt(until)}까지 모든 기능을 무료로 사용하실 수 있습니다.</div>
+        </div>
+        <div style={{ fontSize: 13, marginTop: 10, lineHeight: 1.7 }}>
+          무료 기간이 끝나면 유료 결제 안내 창이 자동으로 나타납니다.<br />
+          요금 등 자세한 내용은 <b>설명서</b> 탭에서 확인하세요.
+        </div>
+        <button className="btn-primary" style={{ width: "100%", marginTop: 14 }} onClick={onClose}>시작하기</button>
+        <button className="btn-secondary" style={{ width: "100%", marginTop: 8 }} onClick={onMore}>요금 자세히 보기 (설명서)</button>
+      </div>
+    </div>
+  );
+}
+
+export function BillingModal({ list, billing, company, onClose }) {
   const [copied, setCopied] = useState(false);
   const bankInfo = billing?.bankInfo || DEFAULT_BANK_INFO;
   const vat = (n) => Math.round(n * 1.1);
@@ -89,12 +110,6 @@ export function BillingModal({ list, billing, company, onClose, welcome }) {
           <h3 style={{ margin: 0 }}>이용 요금 안내 (매장별)</h3>
           <button className="icon-btn" onClick={onClose} aria-label="닫기"><X size={16} /></button>
         </div>
-        {welcome && (
-          <div style={{ background: "#e8f1ff", color: "#0B3FA8", padding: "10px 12px", borderRadius: 8, fontSize: 14, lineHeight: 1.6, marginBottom: 10 }}>
-            <b>가입을 환영합니다!</b><br />
-            지금부터 {TRIAL_DAYS}일 동안 무료로 사용하실 수 있습니다. 무료 기간이 끝나면 아래 요금으로 이용해 주세요.
-          </div>
-        )}
         {list.some((x) => x.st.state === "expired") && (
           <div style={{ background: "#fdecea", color: "#b03a2e", padding: "8px 10px", borderRadius: 8, fontSize: 13, marginBottom: 10 }}>
             이용 기간이 끝나 등록·판독이 제한되었습니다. 아래 계좌로 입금해 주시면 확인 후 바로 연장해 드립니다.

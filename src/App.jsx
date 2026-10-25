@@ -41,7 +41,7 @@ import TaxExportView from "./TaxExport";
 import CameraCapture from "./CameraCapture";
 import { AdminLogin, AdminDenied } from "./AdminPage";
 import { AddToHomeModal, isStandalone } from "./AddToHome";
-import { computeStatus, summarize, BillingBanner, BillingModal, PlatformAdminPanel, isPlatformOperator } from "./Billing";
+import { computeStatus, summarize, BillingBanner, BillingModal, WelcomeModal, PlatformAdminPanel, isPlatformOperator } from "./Billing";
 import {
   collection,
   doc,
@@ -1351,6 +1351,7 @@ export default function App() {
   const [a2hsOpen, setA2hsOpen] = useState(false);
   const a2hsChecked = useRef(false);
   // right after signup: home-screen guide first, then the price guide (once per company)
+  const [manualHash, setManualHash] = useState("");
   const [welcomePending, setWelcomePending] = useState(false);
   const [welcomeBilling, setWelcomeBilling] = useState(false);
   useEffect(() => {
@@ -1372,7 +1373,7 @@ export default function App() {
     // only for newly registered companies (within 3 days of signup), once the home-screen guide is closed
     if (!welcomePending || a2hsOpen || !companyDoc) return;
     setWelcomePending(false);
-    if (Date.now() - (companyDoc.createdAt || 0) < 3 * 86400000) { setWelcomeBilling(true); setBillingOpen(true); }
+    if (Date.now() - (companyDoc.createdAt || 0) < 3 * 86400000) setWelcomeBilling(true);
   }, [welcomePending, a2hsOpen, companyDoc]);
   useEffect(() => {
     if (!companyId) { setCompanyDoc(null); return; }
@@ -1898,7 +1899,7 @@ export default function App() {
       <div className="content">
         {tab === "manual" && (
           <div style={{ margin: "-4px -4px 0" }}>
-            <iframe title="BillNote 사용 설명서" src="/manual.html" style={{ width: "100%", height: "calc(100vh - 170px)", minHeight: 480, border: 0, borderRadius: 10, background: "#fff" }} />
+            <iframe title="BillNote 사용 설명서" src={"/manual.html" + manualHash} style={{ width: "100%", height: "calc(100vh - 170px)", minHeight: 480, border: 0, borderRadius: 10, background: "#fff" }} />
             <div style={{ textAlign: "center", fontSize: 12, marginTop: 6 }}>
               <a href="/manual.html" target="_blank" rel="noopener noreferrer">설명서를 새 창에서 크게 보기</a>
             </div>
@@ -2078,7 +2079,8 @@ export default function App() {
 
       {a2hsOpen && <AddToHomeModal onClose={() => setA2hsOpen(false)} />}
 
-      {billingOpen && <BillingModal welcome={welcomeBilling} list={billingList} billing={billingInfo} company={companyDoc} onClose={() => { setBillingOpen(false); setWelcomeBilling(false); }} />}
+      {billingOpen && <BillingModal list={billingList} billing={billingInfo} company={companyDoc} onClose={() => setBillingOpen(false)} />}
+      {welcomeBilling && <WelcomeModal company={companyDoc} onClose={() => setWelcomeBilling(false)} onMore={() => { setWelcomeBilling(false); setManualHash("#price"); setTab("manual"); }} />}
 
       {cameraOpen && (
         <CameraCapture
