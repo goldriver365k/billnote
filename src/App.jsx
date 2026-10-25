@@ -1370,6 +1370,14 @@ export default function App() {
   const billingStores = (config.stores || []).filter((s) => (isAdmin ? true : s.name === session?.storeName));
   const billingList = billingStores.map((s) => ({ name: s.name, st: storeStatusFor(s.name) }));
   const billingSummary = summarize(billingList);
+  // pop the payment guide up automatically once the free/paid period has ended (once per visit)
+  const billingPopupShown = useRef(false);
+  useEffect(() => {
+    if (!billingPopupShown.current && companyDoc && billingSummary.kind === "expired") {
+      billingPopupShown.current = true;
+      setBillingOpen(true);
+    }
+  }, [companyDoc, billingSummary.kind]); // eslint-disable-line react-hooks/exhaustive-deps
   // storeName given -> that store must be allowed; otherwise at least one store must be allowed
   const blockIfExpired = (storeName) => {
     const ok = storeName

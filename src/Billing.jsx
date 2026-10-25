@@ -4,6 +4,7 @@ import { X, Loader2 } from "lucide-react";
 import { db } from "./firebase";
 
 export const PLATFORM_ADMIN_EMAIL = "higidia@gmail.com";
+export const CONTACT_EMAIL = "goldriver365@gmail.com";
 export const TRIAL_DAYS = 7;
 export const MONTHLY_LIMIT = 300;
 export const PLANS = {
@@ -72,6 +73,11 @@ export function BillingModal({ list, billing, company, onClose }) {
           <h3 style={{ margin: 0 }}>이용 요금 안내 (매장별)</h3>
           <button className="icon-btn" onClick={onClose} aria-label="닫기"><X size={16} /></button>
         </div>
+        {list.some((x) => x.st.state === "expired") && (
+          <div style={{ background: "#fdecea", color: "#b03a2e", padding: "8px 10px", borderRadius: 8, fontSize: 13, marginBottom: 10 }}>
+            무료 체험 또는 이용 기간이 끝나 등록·판독이 제한되었습니다. 아래 계좌로 입금하시면 확인 후 바로 연장해 드립니다.
+          </div>
+        )}
         <div style={{ fontSize: 14, lineHeight: 1.8 }}>
           <b>가입 후 {TRIAL_DAYS}일 무료 체험 · 요금은 매장 1곳 기준</b>
           <div style={{ margin: "8px 0" }}>
@@ -95,7 +101,7 @@ export function BillingModal({ list, billing, company, onClose }) {
             {billing?.bankInfo || "입금 계좌는 운영자에게 문의해 주세요."}
             {"\n"}입금자명에 회사명을 적고, 연장할 매장명을 알려 주세요{company?.companyName ? ` (${company.companyName})` : ""}.
             {"\n"}입금 확인 후 이용 기간이 연장됩니다.
-            {billing?.contact ? `\n문의: ${billing.contact}` : ""}
+            {`\n문의: ${billing?.contact || CONTACT_EMAIL}`}
           </div>
         </div>
         <button className="btn-secondary" style={{ width: "100%", marginTop: 12 }} onClick={onClose}>닫기</button>
@@ -161,7 +167,7 @@ export function PlatformAdminPanel({ billing }) {
       <div className="tape-card" style={{ padding: 16 }}>
         <h3 style={{ margin: "0 0 10px" }}>입금 안내 문구 (회원에게 표시)</h3>
         <textarea value={bank} onChange={(e) => setBank(e.target.value)} rows={3} placeholder="예) 농협 000-0000-0000-00 홍길동" style={{ width: "100%", boxSizing: "border-box" }} />
-        <input value={contact} onChange={(e) => setContact(e.target.value)} placeholder="문의 연락처 (선택)" style={{ width: "100%", boxSizing: "border-box", marginTop: 6 }} />
+        <input value={contact} onChange={(e) => setContact(e.target.value)} placeholder={`문의 연락처 (비우면 ${CONTACT_EMAIL})`} style={{ width: "100%", boxSizing: "border-box", marginTop: 6 }} />
         <button className="btn-primary" style={{ marginTop: 8 }} onClick={saveBilling}>저장</button>
         {msg && <div style={{ fontSize: 13, marginTop: 8 }}>{msg}</div>}
       </div>
