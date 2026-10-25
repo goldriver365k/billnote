@@ -1917,7 +1917,7 @@ export default function App() {
         {tab !== "manage" && tab !== "sales" && tab !== "debt" && tab !== "monthly" && receiptsLoaded && monthReceipts.length === 0 && (
           <div className="empty-state">
             <h3>아직 기록된 영수증이 없습니다</h3>
-            <p>오른쪽 아래 버튼으로 영수증 사진을 올려보세요.</p>
+            <p>오른쪽 아래 버튼으로 영수증 사진을 올려보세요.<br />쿠팡·인터넷 주문은 핸드폰 주문내역 화면을 캡처해서 올리면 됩니다.</p>
           </div>
         )}
 
