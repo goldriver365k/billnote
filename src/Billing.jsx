@@ -5,6 +5,7 @@ import { db } from "./firebase";
 
 // Operator accounts. The new operator email must be a verified account (Google sign-in),
 // otherwise anyone could sign up with that address by email/password and get operator access.
+export const DEFAULT_BANK_INFO = "새마을금고 9003-2378-7668-0\n예금주 김형신"; // used until the operator saves another one
 export const KAKAO_URL = "https://open.kakao.com/o/suBuN0Ti";
 const OPERATORS = [
   { email: "goldriver365@gmail.com", needVerified: true },
@@ -72,6 +73,7 @@ export function BillingBanner({ summary, onOpen }) {
 
 export function BillingModal({ list, billing, company, onClose }) {
   const [copied, setCopied] = useState(false);
+  const bankInfo = billing?.bankInfo || DEFAULT_BANK_INFO;
   const tierLine = (k) => `${PLANS[k].label}: 월 ${won(PLANS[k].month)} / 연 ${won(PLANS[k].year)}`;
   const stLabel = (st) =>
     st.state === "exempt" ? "무료(운영자)" :
@@ -111,10 +113,10 @@ export function BillingModal({ list, billing, company, onClose }) {
           <div style={{ marginTop: 12, padding: 12, background: "#fff7e0", border: "2px solid #e0b43c", borderRadius: 10 }}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>입금 계좌</div>
             <div style={{ fontSize: 17, fontWeight: 700, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-              {billing?.bankInfo || "입금 계좌는 카카오톡으로 문의해 주세요."}
+              {bankInfo}
             </div>
-            {billing?.bankInfo && (
-              <button className="btn-secondary" style={{ marginTop: 8 }} onClick={() => { try { navigator.clipboard.writeText(billing.bankInfo); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch (e) { /* ignore */ } }}>
+            {bankInfo && (
+              <button className="btn-secondary" style={{ marginTop: 8 }} onClick={() => { try { navigator.clipboard.writeText(bankInfo); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch (e) { /* ignore */ } }}>
                 {copied ? "복사되었습니다" : "계좌 복사"}
               </button>
             )}
@@ -143,7 +145,7 @@ function addPeriod(base, unit) {
 export function PlatformAdminPanel({ billing }) {
   const [companies, setCompanies] = useState(null);
   const [tiers, setTiers] = useState({});
-  const [bank, setBank] = useState(billing?.bankInfo || "");
+  const [bank, setBank] = useState(billing?.bankInfo || DEFAULT_BANK_INFO);
   const [msg, setMsg] = useState("");
 
   const load = async () => {
@@ -159,7 +161,7 @@ export function PlatformAdminPanel({ billing }) {
     setCompanies(list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
   };
   useEffect(() => { load().catch((e) => setMsg("불러오기 실패: " + e.message)); }, []);
-  useEffect(() => { setBank(billing?.bankInfo || ""); }, [billing]);
+  useEffect(() => { setBank(billing?.bankInfo || DEFAULT_BANK_INFO); }, [billing]);
 
   const saveBilling = async () => {
     await setDoc(doc(db, "config", "billing"), { bankInfo: bank }, { merge: true });
