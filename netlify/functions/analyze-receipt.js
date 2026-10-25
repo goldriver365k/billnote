@@ -12,7 +12,7 @@ const SYSTEM_PROMPT = `너는 영수증 이미지를 분석해서 구조화된 J
 
 숫자에는 콤마나 원화기호를 넣지 말고 순수 숫자만 넣어라. 항목을 읽을 수 없으면 items를 빈 배열로 둬라.`;
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: JSON.stringify({ error: "Method not allowed" }) };
   }
