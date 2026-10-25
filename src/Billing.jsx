@@ -130,6 +130,7 @@ export function BillingModal({ list, billing, company, onClose }) {
             <div style={{ fontSize: 13, marginTop: 8, lineHeight: 1.7 }}>
               입금자명에 <b>회사명</b>을 적고, 연장할 <b>매장명</b>을 카카오톡으로 알려 주세요{company?.companyName ? ` (${company.companyName})` : ""}.<br />
               입금 확인 후 바로 이용 기간이 연장됩니다.
+              세금계산서 발행을 원하시면 카카오톡으로 <b>사업자등록번호</b>를 보내 주세요.
             </div>
           </div>
           <a href={KAKAO_URL} target="_blank" rel="noopener noreferrer"
