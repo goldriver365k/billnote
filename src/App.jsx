@@ -22,6 +22,7 @@ import {
   ChevronDown,
   Wallet,
   FileArchive,
+  BookOpen,
 } from "lucide-react";
 import {
   BarChart,
@@ -1349,16 +1350,30 @@ export default function App() {
   // first visit on this device (e.g. right after signup): explain how to add the app to the home screen
   const [a2hsOpen, setA2hsOpen] = useState(false);
   const a2hsChecked = useRef(false);
+  // right after signup: home-screen guide first, then the price guide (once per company)
+  const [welcomePending, setWelcomePending] = useState(false);
+  const [welcomeBilling, setWelcomeBilling] = useState(false);
   useEffect(() => {
     if (a2hsChecked.current || !companyId || !authUser) return;
     if (typeof window !== "undefined" && window.location.pathname.replace(/\/+$/, "") === "/admin") return;
     a2hsChecked.current = true;
     try {
-      if (isStandalone() || localStorage.getItem("a2hsSeen")) return;
-      localStorage.setItem("a2hsSeen", "1");
-      setA2hsOpen(true);
+      if (!isStandalone() && !localStorage.getItem("a2hsSeen")) {
+        localStorage.setItem("a2hsSeen", "1");
+        setA2hsOpen(true);
+      }
+      if (!authUser.isAnonymous && !localStorage.getItem("welcomeBilling_" + companyId)) {
+        localStorage.setItem("welcomeBilling_" + companyId, "1");
+        setWelcomePending(true);
+      }
     } catch (e) { /* storage unavailable: skip */ }
   }, [companyId, authUser]);
+  useEffect(() => {
+    // only for newly registered companies (within 3 days of signup), once the home-screen guide is closed
+    if (!welcomePending || a2hsOpen || !companyDoc) return;
+    setWelcomePending(false);
+    if (Date.now() - (companyDoc.createdAt || 0) < 3 * 86400000) { setWelcomeBilling(true); setBillingOpen(true); }
+  }, [welcomePending, a2hsOpen, companyDoc]);
   useEffect(() => {
     if (!companyId) { setCompanyDoc(null); return; }
     return onSnapshot(doc(db, "companies", companyId), (snap) => {
@@ -1876,10 +1891,19 @@ export default function App() {
         <button className={`tab-btn ${tab === "sales" ? "active" : ""}`} onClick={() => setTab("sales")}><TrendingUp size={14} /> 매출/원가율</button>
         {isAdmin && <button className={`tab-btn ${tab === "tax" ? "active" : ""}`} onClick={() => setTab("tax")}><FileArchive size={14} /> 세무자료</button>}
         <button className={`tab-btn ${tab === "all" ? "active" : ""}`} onClick={() => setTab("all")}><Receipt size={14} /> 전체</button>
+        <button className={`tab-btn ${tab === "manual" ? "active" : ""}`} onClick={() => setTab("manual")}><BookOpen size={14} /> 설명서</button>
         {isAdmin && <button className={`tab-btn ${tab === "manage" ? "active" : ""}`} onClick={() => setTab("manage")}><Settings size={14} /> 매장 관리</button>}
       </div>
 
       <div className="content">
+        {tab === "manual" && (
+          <div style={{ margin: "-4px -4px 0" }}>
+            <iframe title="BillNote 사용 설명서" src="/manual.html" style={{ width: "100%", height: "calc(100vh - 170px)", minHeight: 480, border: 0, borderRadius: 10, background: "#fff" }} />
+            <div style={{ textAlign: "center", fontSize: 12, marginTop: 6 }}>
+              <a href="/manual.html" target="_blank" rel="noopener noreferrer">설명서를 새 창에서 크게 보기</a>
+            </div>
+          </div>
+        )}
         {tab === "manage" && isAdmin && <StoreAdminPanel config={config} onUpdateConfig={persistConfig} onUpdateCompanyCode={updateCompanyCode} onMigrateOldData={migrateOldData} />}
 
         {tab === "tax" && isAdmin && (
@@ -1911,10 +1935,10 @@ export default function App() {
         )}
 
 
-        {tab !== "manage" && tab !== "sales" && tab !== "debt" && !receiptsLoaded && <div className="empty-state">불러오는 중...</div>}
+        {tab !== "manage" && tab !== "manual" && tab !== "sales" && tab !== "debt" && !receiptsLoaded && <div className="empty-state">불러오는 중...</div>}
 
 
-        {tab !== "manage" && tab !== "sales" && tab !== "debt" && tab !== "monthly" && receiptsLoaded && monthReceipts.length === 0 && (
+        {tab !== "manage" && tab !== "manual" && tab !== "sales" && tab !== "debt" && tab !== "monthly" && receiptsLoaded && monthReceipts.length === 0 && (
           <div className="empty-state">
             <h3>아직 기록된 영수증이 없습니다</h3>
             <p>오른쪽 아래 버튼으로 영수증 사진을 올려보세요.<br />쿠팡·인터넷 주문은 핸드폰 주문내역 화면을 캡처해서 올리면 됩니다.</p>
@@ -2054,7 +2078,7 @@ export default function App() {
 
       {a2hsOpen && <AddToHomeModal onClose={() => setA2hsOpen(false)} />}
 
-      {billingOpen && <BillingModal list={billingList} billing={billingInfo} company={companyDoc} onClose={() => setBillingOpen(false)} />}
+      {billingOpen && <BillingModal welcome={welcomeBilling} list={billingList} billing={billingInfo} company={companyDoc} onClose={() => { setBillingOpen(false); setWelcomeBilling(false); }} />}
 
       {cameraOpen && (
         <CameraCapture

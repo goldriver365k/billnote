@@ -71,7 +71,7 @@ export function BillingBanner({ summary, onOpen }) {
   );
 }
 
-export function BillingModal({ list, billing, company, onClose }) {
+export function BillingModal({ list, billing, company, onClose, welcome }) {
   const [copied, setCopied] = useState(false);
   const bankInfo = billing?.bankInfo || DEFAULT_BANK_INFO;
   const vat = (n) => Math.round(n * 1.1);
@@ -89,6 +89,12 @@ export function BillingModal({ list, billing, company, onClose }) {
           <h3 style={{ margin: 0 }}>이용 요금 안내 (매장별)</h3>
           <button className="icon-btn" onClick={onClose} aria-label="닫기"><X size={16} /></button>
         </div>
+        {welcome && (
+          <div style={{ background: "#e8f1ff", color: "#0B3FA8", padding: "10px 12px", borderRadius: 8, fontSize: 14, lineHeight: 1.6, marginBottom: 10 }}>
+            <b>가입을 환영합니다!</b><br />
+            지금부터 {TRIAL_DAYS}일 동안 무료로 사용하실 수 있습니다. 무료 기간이 끝나면 아래 요금으로 이용해 주세요.
+          </div>
+        )}
         {list.some((x) => x.st.state === "expired") && (
           <div style={{ background: "#fdecea", color: "#b03a2e", padding: "8px 10px", borderRadius: 8, fontSize: 13, marginBottom: 10 }}>
             이용 기간이 끝나 등록·판독이 제한되었습니다. 아래 계좌로 입금해 주시면 확인 후 바로 연장해 드립니다.
