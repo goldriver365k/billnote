@@ -107,6 +107,7 @@ export function BillingModal({ list, billing, company, onClose }) {
           </div>
           <div style={{ fontSize: 13 }}>
             · 결제 후 1개월(또는 1년)이 지나면 해당 매장은 자동으로 등록·판독이 막힙니다(조회·ZIP 다운로드는 가능).<br />
+            · 가입 후 1개월이 지나도 유료 이용(입금)이 없으면 등록하신 이메일로 안내 메일을 보내며, 메일 발송 후 7일 안에 입금이 확인되지 않으면 모든 자료와 계정이 자동 삭제됩니다.<br />
             · 한 매장의 한 달 영수증이 300장에 도달하면 기본 요금제는 등록이 막히고, 300장 이상 요금제로 바꾸면 계속 등록됩니다.
           </div>
           <div style={{ margin: "10px 0" }}>
@@ -240,6 +241,10 @@ export function PlatformAdminPanel({ billing }) {
     } catch (e) { console.error(e); setMsg("삭제 실패: " + (e.message || "")); }
   };
 
+  const toggleProtected = async (c) => {
+    await setDoc(doc(db, "companies", c.id), { protected: !(c.protected === true) }, { merge: true });
+    await load();
+  };
   const extendTrial = async (c) => {
     await setDoc(doc(db, "companies", c.id), { trialStartedAt: (c.trialStartedAt || Date.now()) + 7 * DAY }, { merge: true });
     await load();
@@ -268,6 +273,12 @@ export function PlatformAdminPanel({ billing }) {
                 {owner ? " · 운영자(무료)" : ""}
                 <button className="btn-secondary" style={{ marginLeft: 8 }} onClick={() => extendTrial(c)}>체험 +7일</button>
                 {!owner && <button className="btn-secondary" style={{ marginLeft: 6, color: "#b03a2e" }} onClick={() => deleteCompany(c)}>회사 삭제</button>}
+                {!owner && (
+                  <label style={{ marginLeft: 8, whiteSpace: "nowrap" }}>
+                    <input type="checkbox" checked={c.protected === true} onChange={() => toggleProtected(c)} /> 자동삭제 제외
+                  </label>
+                )}
+                {c.deletionWarnedAt && <div style={{ color: "#b03a2e", marginTop: 4 }}>미결제 안내 메일 발송 {fmt(c.deletionWarnedAt)} → {fmt(c.deletionWarnedAt + 7 * DAY)} 이후 자동 삭제</div>}
               </div>
               {c.stores.length === 0 && <div style={{ opacity: 0.7, marginTop: 4 }}>등록된 매장 없음</div>}
               {c.stores.map((s) => {
