@@ -1333,23 +1333,40 @@ export default function App() {
   };
 
   const [photoView, setPhotoView] = useState(null); // {loading, dataUrl}
-  // photos are kept for 6 months (by receipt date); ledger data itself is kept
+  // ALL data is deleted 6 months after registration; downloaded archives 1 month after download
   const PHOTO_KEEP_MONTHS = 6;
-  const photoCleanupDone = useRef(false);
+  const registeredAt = (x) => x.createdAt ?? x.updatedAt ?? Date.parse(x.date) ?? 0;
+  const cleanupDone = useRef(false);
   useEffect(() => {
-    if (!isAdmin || !companyId || !receiptsLoaded || photoCleanupDone.current) return;
-    photoCleanupDone.current = true;
-    const d = new Date();
-    d.setMonth(d.getMonth() - PHOTO_KEEP_MONTHS);
-    const cutoff = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    const expired = receipts.filter((r) => r.hasPhoto && (r.date || "9999") < cutoff);
-    expired.forEach(async (r) => {
+    if (!isAdmin || !companyId || cleanupDone.current) return;
+    cleanupDone.current = true;
+    (async () => {
       try {
-        await deleteDoc(doc(db, "companies", companyId, "photos", r.id));
-        await setDoc(doc(db, "companies", companyId, "receipts", r.id), { hasPhoto: false }, { merge: true });
-      } catch (e) { console.error("만료 사진 삭제 실패", e); }
-    });
-  }, [isAdmin, companyId, receiptsLoaded, receipts]); // eslint-disable-line react-hooks/exhaustive-deps
+        const lim = new Date();
+        lim.setMonth(lim.getMonth() - PHOTO_KEEP_MONTHS);
+        const cutoff = lim.getTime();
+        const base = ["companies", companyId];
+        for (const name of ["receipts", "sales", "vendorPayments"]) {
+          const snap = await getDocs(collection(db, ...base, name));
+          for (const d of snap.docs) {
+            const reg = registeredAt(d.data());
+            if (reg < cutoff) {
+              await deleteDoc(d.ref);
+              if (name === "receipts") await deleteDoc(doc(db, ...base, "photos", d.id)).catch(() => {});
+            }
+          }
+        }
+        const arch = await getDocs(collection(db, ...base, "taxArchives"));
+        for (const d of arch.docs) {
+          if ((d.data().expiresAt || 0) < Date.now()) {
+            const ch = await getDocs(collection(d.ref, "chunks"));
+            await Promise.all(ch.docs.map((c) => deleteDoc(c.ref)));
+            await deleteDoc(d.ref);
+          }
+        }
+      } catch (e) { console.error("자동 정리 실패", e); }
+    })();
+  }, [isAdmin, companyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const viewPhoto = async (id) => {
     setPhotoView({ loading: true });
@@ -1752,7 +1769,7 @@ export default function App() {
         {tab === "manage" && isAdmin && <StoreAdminPanel config={config} onUpdateConfig={persistConfig} onUpdateCompanyCode={updateCompanyCode} onMigrateOldData={migrateOldData} />}
 
         {tab === "tax" && isAdmin && (
-          <TaxExportView keepMonths={PHOTO_KEEP_MONTHS} companyId={companyId} storeOptions={config.stores.map((s) => s.name)} receipts={receipts} sales={sales} payments={payments} companyName={config.companyName || ""} defaultMonth={selectedMonth} />
+          <TaxExportView registeredAt={registeredAt} keepMonths={PHOTO_KEEP_MONTHS} companyId={companyId} storeOptions={config.stores.map((s) => s.name)} receipts={receipts} sales={sales} payments={payments} companyName={config.companyName || ""} defaultMonth={selectedMonth} />
         )}
 
         {tab === "debt" && (
@@ -1902,6 +1919,10 @@ export default function App() {
             ))}
           </div>
         )}
+      </div>
+
+      <div style={{ textAlign: "center", fontSize: 11, opacity: 0.6, padding: "16px 12px 110px" }}>
+        다운로드한 자료는 1개월 후 삭제되며, 모든 자료는 등록 {PHOTO_KEEP_MONTHS}개월 후 삭제됩니다.
       </div>
 
       <input ref={fileInputRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onPickFile} />
