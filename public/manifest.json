@@ -1,0 +1,14 @@
+{
+  "name": "영수증 장부",
+  "short_name": "영수증 장부",
+  "description": "사진 한 장으로 매장 지출을 자동 정리합니다",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F1EADA",
+  "theme_color": "#2C3B36",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
