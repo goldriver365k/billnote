@@ -38,6 +38,7 @@ import {
 import { db, auth, googleProvider } from "./firebase";
 import TaxExportView from "./TaxExport";
 import CameraCapture from "./CameraCapture";
+import { AddToHomeModal, isStandalone } from "./AddToHome";
 import { computeStatus, summarize, BillingBanner, BillingModal, PlatformAdminPanel, isPlatformOperator } from "./Billing";
 import {
   collection,
@@ -1344,6 +1345,19 @@ export default function App() {
   const [companyDoc, setCompanyDoc] = useState(null);
   const [billingInfo, setBillingInfo] = useState(null);
   const [billingOpen, setBillingOpen] = useState(false);
+  // first visit on this device (e.g. right after signup): explain how to add the app to the home screen
+  const [a2hsOpen, setA2hsOpen] = useState(false);
+  const a2hsChecked = useRef(false);
+  useEffect(() => {
+    if (a2hsChecked.current || !companyId || !authUser) return;
+    if (typeof window !== "undefined" && window.location.pathname.replace(/\/+$/, "") === "/admin") return;
+    a2hsChecked.current = true;
+    try {
+      if (isStandalone() || localStorage.getItem("a2hsSeen")) return;
+      localStorage.setItem("a2hsSeen", "1");
+      setA2hsOpen(true);
+    } catch (e) { /* storage unavailable: skip */ }
+  }, [companyId, authUser]);
   useEffect(() => {
     if (!companyId) { setCompanyDoc(null); return; }
     return onSnapshot(doc(db, "companies", companyId), (snap) => {
@@ -2013,7 +2027,8 @@ export default function App() {
       </div>
 
       <div style={{ textAlign: "center", fontSize: 11, opacity: 0.6, padding: "16px 12px 110px" }}>
-        다운로드한 자료는 1개월 후 삭제되며, 모든 자료는 등록 {PHOTO_KEEP_MONTHS}개월 후 삭제됩니다.
+        다운로드한 자료는 1개월 후 삭제되며, 모든 자료는 등록 {PHOTO_KEEP_MONTHS}개월 후 삭제됩니다.<br />
+        <button onClick={() => setA2hsOpen(true)} style={{ background: "none", border: "none", textDecoration: "underline", color: "inherit", fontSize: 11, cursor: "pointer", marginTop: 4 }}>휴대폰 바탕화면에 추가하는 방법</button>
       </div>
 
       <input ref={fileInputRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onPickFile} />
@@ -2027,6 +2042,8 @@ export default function App() {
       {analyzing && <div className="analyzing-banner"><Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> 영수증 판독 중{progress ? ` (${Math.min(progress.done + 1, progress.total)}/${progress.total})` : "..."}</div>}
       {notice && !analyzing && <div className="analyzing-banner">{notice}</div>}
       {error && !analyzing && <div className="error-banner">{error}</div>}
+
+      {a2hsOpen && <AddToHomeModal onClose={() => setA2hsOpen(false)} />}
 
       {billingOpen && <BillingModal list={billingList} billing={billingInfo} company={companyDoc} onClose={() => setBillingOpen(false)} />}
 
