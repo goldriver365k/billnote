@@ -3,8 +3,19 @@ import { doc, getDoc, getDocs, setDoc, collection } from "firebase/firestore";
 import { X, Loader2 } from "lucide-react";
 import { db } from "./firebase";
 
-export const PLATFORM_ADMIN_EMAIL = "higidia@gmail.com";
-export const CONTACT_EMAIL = "goldriver365@gmail.com";
+// Operator accounts. The new operator email must be a verified account (Google sign-in),
+// otherwise anyone could sign up with that address by email/password and get operator access.
+export const KAKAO_URL = "https://open.kakao.com/o/suBuN0Ti";
+const OPERATORS = [
+  { email: "goldriver365@gmail.com", needVerified: true },
+  { email: "higidia@gmail.com", needVerified: false }, // legacy operator account
+];
+export function isOperatorEmail(email) { return OPERATORS.some((o) => o.email === email); }
+export function isPlatformOperator(user) {
+  if (!user || user.isAnonymous || !user.email) return false;
+  const o = OPERATORS.find((x) => x.email === user.email);
+  return !!o && (!o.needVerified || user.emailVerified === true);
+}
 export const TRIAL_DAYS = 7;
 export const MONTHLY_LIMIT = 300;
 export const PLANS = {
@@ -60,6 +71,7 @@ export function BillingBanner({ summary, onOpen }) {
 }
 
 export function BillingModal({ list, billing, company, onClose }) {
+  const [copied, setCopied] = useState(false);
   const tierLine = (k) => `${PLANS[k].label}: 월 ${won(PLANS[k].month)} / 연 ${won(PLANS[k].year)}`;
   const stLabel = (st) =>
     st.state === "exempt" ? "무료(운영자)" :
@@ -75,7 +87,7 @@ export function BillingModal({ list, billing, company, onClose }) {
         </div>
         {list.some((x) => x.st.state === "expired") && (
           <div style={{ background: "#fdecea", color: "#b03a2e", padding: "8px 10px", borderRadius: 8, fontSize: 13, marginBottom: 10 }}>
-            무료 체험 또는 이용 기간이 끝나 등록·판독이 제한되었습니다. 아래 계좌로 입금하시면 확인 후 바로 연장해 드립니다.
+            이용 기간이 끝나 등록·판독이 제한되었습니다. 아래 계좌로 입금해 주시면 확인 후 바로 연장해 드립니다.
           </div>
         )}
         <div style={{ fontSize: 14, lineHeight: 1.8 }}>
@@ -96,13 +108,25 @@ export function BillingModal({ list, billing, company, onClose }) {
             ))}
             {list.length === 0 && <div>등록된 매장이 없습니다</div>}
           </div>
-          <div style={{ marginTop: 12, padding: 10, background: "rgba(0,0,0,0.05)", borderRadius: 8, whiteSpace: "pre-wrap" }}>
-            <b>입금 안내</b>{"\n"}
-            {billing?.bankInfo || "입금 계좌는 운영자에게 문의해 주세요."}
-            {"\n"}입금자명에 회사명을 적고, 연장할 매장명을 알려 주세요{company?.companyName ? ` (${company.companyName})` : ""}.
-            {"\n"}입금 확인 후 이용 기간이 연장됩니다.
-            {`\n문의: ${billing?.contact || CONTACT_EMAIL}`}
+          <div style={{ marginTop: 12, padding: 12, background: "#fff7e0", border: "2px solid #e0b43c", borderRadius: 10 }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>입금 계좌</div>
+            <div style={{ fontSize: 17, fontWeight: 700, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+              {billing?.bankInfo || "입금 계좌는 카카오톡으로 문의해 주세요."}
+            </div>
+            {billing?.bankInfo && (
+              <button className="btn-secondary" style={{ marginTop: 8 }} onClick={() => { try { navigator.clipboard.writeText(billing.bankInfo); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch (e) { /* ignore */ } }}>
+                {copied ? "복사되었습니다" : "계좌 복사"}
+              </button>
+            )}
+            <div style={{ fontSize: 13, marginTop: 8, lineHeight: 1.7 }}>
+              입금자명에 <b>회사명</b>을 적고, 연장할 <b>매장명</b>을 카카오톡으로 알려 주세요{company?.companyName ? ` (${company.companyName})` : ""}.<br />
+              입금 확인 후 바로 이용 기간이 연장됩니다.
+            </div>
           </div>
+          <a href={KAKAO_URL} target="_blank" rel="noopener noreferrer"
+            style={{ display: "block", textAlign: "center", marginTop: 12, padding: "11px 10px", borderRadius: 10, background: "#FEE500", color: "#191919", fontWeight: 700, textDecoration: "none" }}>
+            카카오톡으로 문의하기
+          </a>
         </div>
         <button className="btn-secondary" style={{ width: "100%", marginTop: 12 }} onClick={onClose}>닫기</button>
       </div>
@@ -120,7 +144,6 @@ export function PlatformAdminPanel({ billing }) {
   const [companies, setCompanies] = useState(null);
   const [tiers, setTiers] = useState({});
   const [bank, setBank] = useState(billing?.bankInfo || "");
-  const [contact, setContact] = useState(billing?.contact || "");
   const [msg, setMsg] = useState("");
 
   const load = async () => {
@@ -136,10 +159,10 @@ export function PlatformAdminPanel({ billing }) {
     setCompanies(list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
   };
   useEffect(() => { load().catch((e) => setMsg("불러오기 실패: " + e.message)); }, []);
-  useEffect(() => { setBank(billing?.bankInfo || ""); setContact(billing?.contact || ""); }, [billing]);
+  useEffect(() => { setBank(billing?.bankInfo || ""); }, [billing]);
 
   const saveBilling = async () => {
-    await setDoc(doc(db, "config", "billing"), { bankInfo: bank, contact }, { merge: true });
+    await setDoc(doc(db, "config", "billing"), { bankInfo: bank }, { merge: true });
     setMsg("입금 안내를 저장했습니다");
   };
   const updateStore = async (c, storeName, patchFn) => {
@@ -167,7 +190,6 @@ export function PlatformAdminPanel({ billing }) {
       <div className="tape-card" style={{ padding: 16 }}>
         <h3 style={{ margin: "0 0 10px" }}>입금 안내 문구 (회원에게 표시)</h3>
         <textarea value={bank} onChange={(e) => setBank(e.target.value)} rows={3} placeholder="예) 농협 000-0000-0000-00 홍길동" style={{ width: "100%", boxSizing: "border-box" }} />
-        <input value={contact} onChange={(e) => setContact(e.target.value)} placeholder={`문의 연락처 (비우면 ${CONTACT_EMAIL})`} style={{ width: "100%", boxSizing: "border-box", marginTop: 6 }} />
         <button className="btn-primary" style={{ marginTop: 8 }} onClick={saveBilling}>저장</button>
         {msg && <div style={{ fontSize: 13, marginTop: 8 }}>{msg}</div>}
       </div>
@@ -177,7 +199,7 @@ export function PlatformAdminPanel({ billing }) {
         {!companies && <div><Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> 불러오는 중...</div>}
         {companies && companies.length === 0 && <div>가입한 회사가 없습니다</div>}
         {companies && companies.map((c) => {
-          const owner = c.email === PLATFORM_ADMIN_EMAIL;
+          const owner = isOperatorEmail(c.email);
           return (
             <div key={c.id} style={{ borderTop: "1px dashed rgba(0,0,0,0.2)", padding: "10px 0", fontSize: 13 }}>
               <div style={{ fontWeight: 600 }}>{c.companyName || "(이름 없음)"} <span style={{ fontWeight: 400, opacity: 0.7 }}>{c.email}</span></div>

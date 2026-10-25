@@ -38,7 +38,7 @@ import {
 import { db, auth, googleProvider } from "./firebase";
 import TaxExportView from "./TaxExport";
 import CameraCapture from "./CameraCapture";
-import { computeStatus, summarize, BillingBanner, BillingModal, PlatformAdminPanel, PLATFORM_ADMIN_EMAIL } from "./Billing";
+import { computeStatus, summarize, BillingBanner, BillingModal, PlatformAdminPanel, isPlatformOperator } from "./Billing";
 import {
   collection,
   doc,
@@ -1359,7 +1359,7 @@ export default function App() {
     if (!companyId) return;
     return onSnapshot(doc(db, "config", "billing"), (snap) => setBillingInfo(snap.exists() ? snap.data() : null), () => {});
   }, [companyId]);
-  const isPlatformOwner = !!authUser && !authUser.isAnonymous && authUser.email === PLATFORM_ADMIN_EMAIL;
+  const isPlatformOwner = isPlatformOperator(authUser);
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
   const countFor = (storeName) => receipts.filter((r) => r.store === storeName && (r.createdAt || 0) >= monthStart).length;
   const storeStatusFor = (storeName) => {
