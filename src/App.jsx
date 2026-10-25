@@ -1792,6 +1792,36 @@ export default function App() {
     }
   };
 
+  // billnote.store/admin : operator-only page
+  if (typeof window !== "undefined" && window.location.pathname.replace(/\/+$/, "") === "/admin") {
+    return (
+      <div className="app-root">
+        <style>{styles}</style>
+        <div className="header">
+          <div>
+            <h1><ShieldCheck size={22} /> BillNote 운영자</h1>
+            <p>회원사·매장 이용 기간 관리</p>
+          </div>
+          <div className="who-badge">
+            <a href="/" style={{ color: "inherit", marginRight: 8 }}>앱으로</a>
+            <button onClick={handleLogout} aria-label="로그아웃"><LogOut size={14} /></button>
+          </div>
+        </div>
+        <div className="content">
+          {isPlatformOwner ? (
+            <PlatformAdminPanel billing={billingInfo} />
+          ) : (
+            <div className="tape-empty">
+              운영자 계정으로 로그인해야 볼 수 있습니다.<br />
+              로그인 화면의 <b>구글로 계속하기</b>로 운영자 계정에 로그인해 주세요.<br /><br />
+              <a href="/">앱으로 돌아가기</a> · <button className="btn-secondary" onClick={handleLogout}>다른 계정으로 로그인</button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-root">
       <style>{styles}</style>
@@ -1823,14 +1853,11 @@ export default function App() {
         <button className={`tab-btn ${tab === "sales" ? "active" : ""}`} onClick={() => setTab("sales")}><TrendingUp size={14} /> 매출/원가율</button>
         {isAdmin && <button className={`tab-btn ${tab === "tax" ? "active" : ""}`} onClick={() => setTab("tax")}><FileArchive size={14} /> 세무자료</button>}
         <button className={`tab-btn ${tab === "all" ? "active" : ""}`} onClick={() => setTab("all")}><Receipt size={14} /> 전체</button>
-        {isPlatformOwner && <button className={`tab-btn ${tab === "platform" ? "active" : ""}`} onClick={() => setTab("platform")}><ShieldCheck size={14} /> 운영자</button>}
         {isAdmin && <button className={`tab-btn ${tab === "manage" ? "active" : ""}`} onClick={() => setTab("manage")}><Settings size={14} /> 매장 관리</button>}
       </div>
 
       <div className="content">
         {tab === "manage" && isAdmin && <StoreAdminPanel config={config} onUpdateConfig={persistConfig} onUpdateCompanyCode={updateCompanyCode} onMigrateOldData={migrateOldData} />}
-
-        {tab === "platform" && isPlatformOwner && <PlatformAdminPanel billing={billingInfo} />}
 
         {tab === "tax" && isAdmin && (
           <TaxExportView registeredAt={registeredAt} keepMonths={PHOTO_KEEP_MONTHS} companyId={companyId} storeOptions={config.stores.map((s) => s.name)} receipts={receipts} sales={sales} payments={payments} companyName={config.companyName || ""} defaultMonth={selectedMonth} />
