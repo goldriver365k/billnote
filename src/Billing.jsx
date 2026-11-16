@@ -207,7 +207,7 @@ export function PlatformAdminPanel({ billing }) {
   useEffect(() => { load().catch((e) => setMsg("불러오기 실패: " + e.message)); }, []);
   useEffect(() => { setBank(billing?.bankInfo || DEFAULT_BANK_INFO); }, [billing]);
 
-  const saveBilling = async () => {
+  const saveBillingRaw = async () => {
     await setDoc(doc(db, "config", "billing"), { bankInfo: bank }, { merge: true });
     setMsg("입금 안내를 저장했습니다");
   };
@@ -216,15 +216,16 @@ export function PlatformAdminPanel({ billing }) {
     await setDoc(doc(db, "companies", c.id, "config", "store"), { stores }, { merge: true });
     await load();
   };
-  const extend = async (c, s, unit) => {
+  const extendRaw = async (c, s, unit) => {
     const key = c.id + "__" + s.name;
     const tier = tiers[key] || s.tier || "basic";
     await updateStore(c, s.name, (cur) => ({ paidUntil: addPeriod(Math.max(Date.now(), cur.paidUntil || 0), unit), tier }));
     setMsg(`${c.companyName || c.email} / ${s.name}: ${unit === "year" ? "1년" : "1개월"} 연장했습니다`);
   };
-  const clearPaid = async (c, s) => {
+  const clearPaidRaw = async (c, s) => {
     if (!window.confirm(`${s.name}의 유료 기간을 해제할까요?`)) return;
     await updateStore(c, s.name, () => ({ paidUntil: 0 }));
+    setMsg(`${s.name}: 유료 기간을 해제했습니다`);
   };
   // remove one store from a company, optionally with all of its data
   const deleteStore = async (c, s) => {
@@ -265,22 +266,37 @@ export function PlatformAdminPanel({ billing }) {
     } catch (e) { console.error(e); setMsg("삭제 실패: " + (e.message || "")); }
   };
 
-  const toggleProtected = async (c) => {
+  const toggleProtectedRaw = async (c) => {
     await setDoc(doc(db, "companies", c.id), { protected: !(c.protected === true) }, { merge: true });
     await load();
   };
-  const extendTrial = async (c) => {
+  const extendTrialRaw = async (c) => {
     await setDoc(doc(db, "companies", c.id), { trialStartedAt: (c.trialStartedAt || Date.now()) + 7 * DAY }, { merge: true });
     await load();
+    setMsg(`${c.companyName || c.email}: 체험 7일 연장했습니다`);
   };
+
+  const safe = (fn) => async (...args) => {
+    try { await fn(...args); }
+    catch (e) { console.error(e); setMsg("⚠ 저장 실패: " + (e.code || "") + " " + (e.message || "") + " (권한 문제일 수 있습니다)"); }
+  };
+  const saveBilling = safe(saveBillingRaw);
+  const extend = safe(extendRaw);
+  const clearPaid = safe(clearPaidRaw);
+  const toggleProtected = safe(toggleProtectedRaw);
+  const extendTrial = safe(extendTrialRaw);
 
   return (
     <div>
+      {msg && (
+        <div onClick={() => setMsg("")} style={{ position: "fixed", left: 12, right: 12, bottom: 16, zIndex: 3000, background: msg.startsWith("⚠") ? "#b03a2e" : "#2d4a3a", color: "#fff", padding: "12px 14px", borderRadius: 10, fontSize: 14, boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}>
+          {msg} <span style={{ opacity: 0.7, fontSize: 12 }}>(누르면 닫힘)</span>
+        </div>
+      )}
       <div className="tape-card" style={{ padding: 16 }}>
         <h3 style={{ margin: "0 0 10px" }}>입금 안내 문구 (회원에게 표시)</h3>
         <textarea value={bank} onChange={(e) => setBank(e.target.value)} rows={3} placeholder="예) 농협 000-0000-0000-00 홍길동" style={{ width: "100%", boxSizing: "border-box" }} />
         <button className="btn-primary" style={{ marginTop: 8 }} onClick={saveBilling}>저장</button>
-        {msg && <div style={{ fontSize: 13, marginTop: 8 }}>{msg}</div>}
       </div>
 
       <div className="tape-card" style={{ padding: 16, marginTop: 12 }}>
