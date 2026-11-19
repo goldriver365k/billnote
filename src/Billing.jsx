@@ -115,7 +115,7 @@ export function BillingModal({ list, billing, company, onClose }) {
         </div>
         {list.some((x) => x.st.state === "expired") && (
           <div style={{ background: "#fdecea", color: "#b03a2e", padding: "8px 10px", borderRadius: 8, fontSize: 13, marginBottom: 10 }}>
-            이용 기간이 끝나 등록·판독이 제한되었습니다. 아래 계좌로 입금해 주시면 확인 후 바로 연장해 드립니다.
+            [{list.filter((x) => x.st.state === "expired").map((x) => x.name).join(", ")}] 매장의 이용 기간이 끝나 이 매장의 등록·판독이 제한되었습니다. 아래 계좌로 입금해 주시면 확인 후 바로 연장해 드립니다.
           </div>
         )}
         <div style={{ fontSize: 14, lineHeight: 1.8 }}>
