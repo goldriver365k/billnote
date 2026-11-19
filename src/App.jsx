@@ -1426,7 +1426,9 @@ export default function App() {
   }, [companyDoc, billingSummary.kind]); // eslint-disable-line react-hooks/exhaustive-deps
   // storeName given -> that store must be allowed; otherwise at least one store must be allowed
   const blockIfExpired = (storeName) => {
-    const ok = storeName
+    // a store name that is not (or no longer) in the store list is judged by the company's stores as a whole
+    const known = storeName && (config.stores || []).some((x) => x.name === storeName);
+    const ok = known
       ? storeStatusFor(storeName).canAdd
       : (billingList.length === 0 ? computeStatus({}, companyDoc, isPlatformOwner, 0).canAdd : billingList.some((x) => x.st.canAdd));
     if (ok) return false;
