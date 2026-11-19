@@ -219,6 +219,7 @@ export function PlatformAdminPanel({ billing }) {
   const extendRaw = async (c, s, unit) => {
     const key = c.id + "__" + s.name;
     const tier = tiers[key] || s.tier || "basic";
+    if ((s.paidUntil || 0) > Date.now() && !window.confirm(`${s.name}은(는) 이미 ${fmt(s.paidUntil)}까지 유료입니다.\n여기에 ${unit === "year" ? "1년" : "1개월"}을 더 연장할까요?`)) return;
     await updateStore(c, s.name, (cur) => ({ paidUntil: addPeriod(Math.max(Date.now(), cur.paidUntil || 0), unit), tier }));
     setMsg(`${c.companyName || c.email} / ${s.name}: ${unit === "year" ? "1년" : "1개월"} 연장했습니다`);
   };
